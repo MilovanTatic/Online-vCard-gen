@@ -1,0 +1,38 @@
+{
+    "IPG Class Template": {
+        "prefix": "ipgclass",
+        "body": [
+            "<?php",
+            "/**",
+            " * ${1:Class description}",
+            " *",
+            " * @package NovaBankaIPG\\${2:Namespace}",
+            " */",
+            "",
+            "namespace NovaBankaIPG\\${2:Namespace};",
+            "",
+            "defined('ABSPATH') || exit;",
+            "",
+            "class ${3:ClassName} {",
+            "    $0",
+            "}"
+        ]
+    },
+    "IPG Interface Template": {
+        "prefix": "ipginterface",
+        "body": [
+            "<?php",
+            "/**",
+            " * ${1:Interface description}",
+            " *",
+            " * @package NovaBankaIPG\\Interfaces",
+            " */",
+            "",
+            "namespace NovaBankaIPG\\Interfaces;",
+            "",
+            "interface ${2:InterfaceName} {",
+            "    $0",
+            "}"
+        ]
+    }
+}
