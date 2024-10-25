@@ -1,0 +1,55 @@
+/* assets/css/ipg-admin.css */
+
+.ipg-admin-section {
+    padding: 20px;
+    background: #fff;
+    border: 1px solid #ddd;
+    margin: 10px 0;
+}
+
+.ipg-field-row {
+    margin: 15px 0;
+}
+
+.ipg-field-row label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+}
+
+.ipg-field-row input[type="text"],
+.ipg-field-row input[type="password"] {
+    width: 400px;
+    max-width: 100%;
+}
+
+.ipg-field-description {
+    color: #666;
+    font-style: italic;
+    margin-top: 5px;
+}
+
+.ipg-test-mode-notice {
+    background: #fff8e5;
+    border-left: 4px solid #ffb900;
+    padding: 10px;
+    margin: 10px 0;
+}
+
+/* Transaction details table */
+.ipg-transaction-details {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+}
+
+.ipg-transaction-details th,
+.ipg-transaction-details td {
+    padding: 8px;
+    text-align: left;
+    border: 1px solid #ddd;
+}
+
+.ipg-transaction-details th {
+    background: #f8f8f8;
+}
