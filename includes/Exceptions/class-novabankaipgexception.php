@@ -148,7 +148,10 @@ class NovaBankaIPGException extends \Exception {
 	 * @return self
 	 */
 	public static function apiError( string $message = '', $data = null ): self {
-		return new self( $message, 'API_ERROR', $data );
+		$exception             = new self( $message, self::ERROR_CODES['API_ERROR']['code'] );
+		$exception->error_type = 'API_ERROR';
+		$exception->error_data = $data;
+		return $exception;
 	}
 
 	/**
@@ -189,5 +192,19 @@ class NovaBankaIPGException extends \Exception {
 	 */
 	public function getType() {
 		return $this->error_type;
+	}
+
+	/**
+	 * Create an invalid signature exception
+	 *
+	 * @param string $message Error message.
+	 * @param mixed  $data    Additional error data.
+	 * @return self
+	 */
+	public static function invalidSignature( string $message, $data = null ): self {
+		$exception             = new self( $message, self::ERROR_CODES['INVALID_SIGNATURE']['code'] );
+		$exception->error_type = 'INVALID_SIGNATURE';
+		$exception->error_data = $data;
+		return $exception;
 	}
 }

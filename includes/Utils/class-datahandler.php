@@ -48,7 +48,7 @@ class DataHandler {
 	);
 
 	/**
-	 * Format amount according to IPG specifications
+	 * Format amount according to IPG specifications.
 	 * Format: NNNNNNNNNN.NN (max value 9999999999.99)
 	 *
 	 * @param float|string $amount Amount to format.
@@ -60,14 +60,14 @@ class DataHandler {
 		$amount = str_replace( array( ',', ' ' ), '', (string) $amount );
 
 		if ( ! is_numeric( $amount ) ) {
-			throw NovaBankaIPGException::invalidRequest( 'Invalid amount format' );
+			throw NovaBankaIPGException::invalidRequest( 'Invalid amount format.' );
 		}
 
 		$amount = (float) $amount;
 
 		// Check maximum value.
 		if ( $amount > 9999999999.99 ) {
-			throw NovaBankaIPGException::invalidRequest( 'Amount exceeds maximum allowed value' );
+			throw NovaBankaIPGException::invalidRequest( 'Amount exceeds maximum allowed value.' );
 		}
 
 		// Format with exactly 2 decimal places.
@@ -75,8 +75,8 @@ class DataHandler {
 	}
 
 	/**
-	 * Format phone number according to IPG specifications
-	 * Max length: 20, only numbers and + allowed
+	 * Format phone number according to IPG specifications.
+	 * Max length: 20, only numbers and + allowed.
 	 *
 	 * @param string $phone Phone number.
 	 * @return string|null
@@ -96,7 +96,7 @@ class DataHandler {
 	}
 
 	/**
-	 * Format email according to IPG specifications
+	 * Format email according to IPG specifications.
 	 *
 	 * @param string $email Email address.
 	 * @return string|null
@@ -114,18 +114,30 @@ class DataHandler {
 	/**
 	 * Get numeric currency code for IPG
 	 *
-	 * @param string $currency Currency code (ISO 4217).
-	 * @return string
-	 * @throws NovaBankaIPGException If the currency is unsupported.
+	 * @param string $currency_code Alpha currency code (e.g., 'BAM', 'EUR', 'USD').
+	 * @return string Numeric currency code.
+	 * @throws NovaBankaIPGException If currency is not supported.
 	 */
-	public function get_currency_code( $currency ) {
-		$currency = strtoupper( $currency );
+	public function get_currency_code( string $currency_code ): string {
+		$currency_map = array(
+			'BAM' => '977', // Bosnian Convertible Mark.
+			'EUR' => '978', // Euro.
+			'USD' => '840', // US Dollar.
+			'GBP' => '826', // British Pound.
+			'HRK' => '191', // Croatian Kuna.
+			'RSD' => '941', // Serbian Dinar.
+			// Add other currencies as needed.
+		);
 
-		if ( ! isset( self::CURRENCY_CODES[ $currency ] ) ) {
-			throw NovaBankaIPGException::invalidRequest( esc_html( "Unsupported currency: {$currency}" ) );
+		$code = strtoupper( $currency_code );
+		if ( ! isset( $currency_map[ $code ] ) ) {
+			throw new NovaBankaIPGException(
+				sprintf( 'Currency %s is not supported', $currency_code ),
+				'INVALID_CURRENCY'
+			);
 		}
 
-		return self::CURRENCY_CODES[ $currency ];
+		return $currency_map[ $code ];
 	}
 
 	/**
@@ -140,11 +152,11 @@ class DataHandler {
 		$track_id = sanitize_text_field( $track_id );
 
 		if ( empty( $track_id ) ) {
-			throw NovaBankaIPGException::invalidRequest( 'Track ID is required' );
+			throw NovaBankaIPGException::invalidRequest( 'Track ID is required.' );
 		}
 
 		if ( strlen( $track_id ) > 255 ) {
-			throw NovaBankaIPGException::invalidRequest( 'Track ID exceeds maximum length of 255 characters' );
+			throw NovaBankaIPGException::invalidRequest( 'Track ID exceeds maximum length of 255 characters.' );
 		}
 
 		return $track_id;
@@ -202,21 +214,8 @@ class DataHandler {
 	}
 
 	/**
-	 * Format cart item amount.
-	 *
-	 * @param float $amount   Amount to format.
-	 * @param int   $quantity Item quantity.
-	 * @return string
-	 * @throws NovaBankaIPGException If the amount is not numeric or exceeds the maximum allowed value.
-	 */
-	public function format_item_amount( $amount, $quantity = 1 ) {
-		$total = $amount * $quantity;
-		return $this->format_amount( $total );
-	}
-
-	/**
-	 * Validate language code
-	 * Supported codes: ITA, USA, FRA, DEU, ESP, SLO, SRB, POR, RUS
+	 * Validate language code.
+	 * Supported codes: ITA, USA, FRA, DEU, ESP, SLO, SRB, POR, RUS.
 	 *
 	 * @param string $lang_code Language code.
 	 * @return string
@@ -228,26 +227,9 @@ class DataHandler {
 		$lang_code = strtoupper( $lang_code );
 
 		if ( ! in_array( $lang_code, $supported_langs, true ) ) {
-			throw NovaBankaIPGException::invalidRequest( 'Unsupported language code' );
+			throw NovaBankaIPGException::invalidRequest( 'Unsupported language code.' );
 		}
 
 		return $lang_code;
 	}
-
-	/**
-	 * Sanitize payment description.
-	 * Max 255 chars for recurring payment description.
-	 *
-	 * @param string $description Payment description.
-	 * @return string|null
-	 */
-	public function format_payment_description( $description ) {
-		if ( empty( $description ) ) {
-			return null;
-		}
-
-		return substr( sanitize_text_field( $description ), 0, 255 );
-	}
-
-
 }

@@ -83,19 +83,23 @@ class MessageHandler {
 
 			$request = $this->prepare_payment_init_request( $data );
 
-			$this->logger->debug( 'Generated PaymentInit request', array( 'request' => $request ) );
+			$this->logger->debug( 'Generated PaymentInit request.', array( 'request' => $request ) );
 
 			return $request;
 
 		} catch ( \Exception $e ) {
 			$this->logger->error(
-				'Failed to generate PaymentInit request',
+				'Failed to generate PaymentInit request.',
 				array(
-					'error' => $e->getMessage(),
-					'data'  => $data,
+					'error' => esc_html( $e->getMessage() ),
+					'data'  => esc_html( wp_json_encode( $data ) ),
 				)
 			);
-			throw new NovaBankaIPGException( esc_html( $e->getMessage() ), 'REQUEST_GENERATION_ERROR', esc_html( $data ) );
+			throw new NovaBankaIPGException(
+				esc_html( $e->getMessage() ),
+				'REQUEST_GENERATION_ERROR',
+				esc_html( wp_json_encode( $data ) )
+			);
 		}
 	}
 
@@ -103,49 +107,28 @@ class MessageHandler {
 	 * Verify PaymentInit response.
 	 *
 	 * @param array $response Response from IPG.
-	 * @return array
+	 * @return string
 	 * @throws NovaBankaIPGException When response verification fails.
 	 */
-	public function verify_payment_init_response( array $response ): array {
-		try {
-			$this->validate_required_fields(
-				$response,
-				array(
-					'msgName',
-					'version',
-					'msgDateTime',
-					'paymentid',
-					'browserRedirectionURL',
-					'msgVerifier',
-				)
+	public function verify_payment_init_response( array $response ): string {
+		$this->logger->debug('Processing PaymentInit response', [
+			'response' => $response
+		]);
+
+		// Check for error response
+		if (isset($response['type']) && $response['type'] === 'error') {
+			throw new NovaBankaIPGException(
+				isset($response['errorDesc']) ? $response['errorDesc'] : 'Payment initialization failed'
 			);
-
-			// Calculate expected verifier.
-			$expected_verifier = $this->generateMessageVerifier(
-				$response['msgName'],
-				$response['version'],
-				$response['msgDateTime'],
-				$response['paymentid'],
-				$this->secret_key,
-				$response['browserRedirectionURL']
-			);
-
-			if ( ! hash_equals( $expected_verifier, $response['msgVerifier'] ) ) {
-				throw new NovaBankaIPGException( 'Invalid response signature' );
-			}
-
-			return $response;
-
-		} catch ( \Exception $e ) {
-			$this->logger->error(
-				'PaymentInit response verification failed',
-				array(
-					'error'    => $e->getMessage(),
-					'response' => $response,
-				)
-			);
-			throw new NovaBankaIPGException( esc_html( $e->getMessage() ), 'RESPONSE_VERIFICATION_ERROR', esc_html( $response ) );
 		}
+
+		// Verify we have the redirection URL
+		if (!isset($response['browserRedirectionURL'])) {
+			throw new NovaBankaIPGException('Missing HPP redirection URL in response');
+		}
+
+		// Return just the HPP URL
+		return $response['browserRedirectionURL'];
 	}
 
 	/**
@@ -197,14 +180,49 @@ class MessageHandler {
 	 * @return string
 	 */
 	private function generate_message_verifier( ...$fields ): string {
-		// Concatenate fields.
-		$message = implode( '', array_filter( $fields ) );
+		// Direct concatenation without spaces between fields
+		$message = implode( '', $fields );
 
-		// Remove spaces.
+		$this->logger->debug(
+			'Message verifier generation:',
+			array(
+				'initial_string' => $message,
+				'initial_hex'    => bin2hex( $message ),
+			)
+		);
+
+		// Remove all spaces
 		$message = preg_replace( '/\s+/', '', $message );
 
-		// Generate SHA-256 hash and encode as Base64.
-		return base64_encode( hash( 'sha256', $message, true ) );
+		$this->logger->debug(
+			'After space removal:',
+			array(
+				'processed_string' => $message,
+				'processed_hex'    => bin2hex( $message ),
+			)
+		);
+
+		// Get raw hash bytes
+		$hash_bytes = hash( 'sha256', $message, true );
+
+		$this->logger->debug(
+			'Hash bytes:',
+			array(
+				'hex' => strtoupper( bin2hex( $hash_bytes ) ),
+			)
+		);
+
+		// Base64 encode
+		$verifier = base64_encode( $hash_bytes );
+
+		$this->logger->debug(
+			'Final verifier:',
+			array(
+				'verifier' => $verifier,
+			)
+		);
+
+		return $verifier;
 	}
 
 	/**
@@ -551,53 +569,137 @@ class MessageHandler {
 	 * @throws NovaBankaIPGException When data validation fails.
 	 */
 	private function prepare_payment_init_request( array $data ): array {
-		$request = array(
-			'msgName'            => 'PaymentInitRequest',
-			'version'            => '1',
-			'id'                 => $data['id'],
-			'password'           => $data['password'],
-			'action'             => '1',  // Fixed value for standard payment
-			'currencycode'       => $this->data_handler->get_currency_code($data['currency']),
-			'amt'                => $this->data_handler->format_amount($data['amount']),
-			'trackid'            => $this->data_handler->format_track_id($data['trackid']),
-			'responseURL'        => $data['responseURL'],
-			'errorURL'           => $data['errorURL'],
-			'langid'             => $this->data_handler->validate_language_code($data['langid']),
-			'notificationFormat' => 'json',
+		$this->logger->debug(
+			'Starting payment init request preparation',
+			array(
+				'raw_input_data' => $data,
+			)
 		);
 
-		// Only add RecurAction if it's a recurring payment
-		if (isset($data['recurAction']) && !empty($data['recurAction'])) {
-			$request['RecurAction'] = $this->validate_recur_action($data['recurAction']);
-			if (!empty($data['recurContractId'])) {
-				$request['RecurContractId'] = substr($data['recurContractId'], 0, 30);
-			}
-		}
+		// Store raw values for message verification
+		$raw_values = array(
+			'msgName'  => 'PaymentInitRequest',
+			'version'  => '1',
+			'id'       => $data['id'],
+			'password' => $data['password'],
+			'amt'      => $this->data_handler->format_amount( $data['amount'] ),
+			'trackid'  => (string) $data['trackid'],
+			'udf1'     => $data['udf1'] ?? '',
+			'udf5'     => $data['udf5'] ?? '',
+		);
 
-		// Add buyer information if provided
-		if (!empty($data['email'])) {
+		$this->logger->debug(
+			'Raw values prepared for verification',
+			array(
+				'raw_values' => $raw_values,
+			)
+		);
+
+		// Prepare request
+		$request = array(
+			'msgName'            => $raw_values['msgName'],
+			'version'            => $raw_values['version'],
+			'id'                 => $raw_values['id'],
+			'password'           => $raw_values['password'],
+			'action'             => '1',
+			'currencycode'       => $this->data_handler->get_currency_code( $data['currency'] ),
+			'amt'                => $raw_values['amt'],
+			'trackid'            => $raw_values['trackid'],
+			'responseURL'        => $data['responseURL'],
+			'errorURL'           => $data['errorURL'],
+			'langid'             => $data['langid'],
+			'notificationFormat' => 'json',
+			'payinst'            => 'VPAS',
+			'recurAction'        => '',
+		);
+
+		$this->logger->debug(
+			'Base request prepared',
+			array(
+				'request' => $request,
+			)
+		);
+
+		// Add optional fields.
+		if ( ! empty( $data['email'] ) ) {
 			$request['buyerEmailAddress'] = $data['email'];
 		}
 
-		// Add UDF fields
-		if (!empty($data['udf1'])) {
-			$request['udf1'] = $data['udf1'];
+		// Add UDF fields.
+		foreach ( array( 'udf1', 'udf2', 'udf3' ) as $udf ) {
+			if ( ! empty( $data[ $udf ] ) ) {
+				$request[ $udf ] = $data[ $udf ];
+			}
 		}
 
-		// Generate message verifier
-		$request['msgVerifier'] = $this->generate_message_verifier(
-			$request['msgName'],
-			$request['version'],
-			$request['id'],
-			$request['password'],
-			$request['amt'],
-			$request['trackid'],
-			$request['udf1'] ?? '',
+		// Generate message verifier using raw values.
+		$verifier_fields = array(
+			$raw_values['msgName'],
+			$raw_values['version'],
+			$raw_values['id'],
+			$raw_values['password'],
+			$raw_values['amt'],
+			$raw_values['trackid'],
+			$raw_values['udf1'],
 			$this->secret_key,
-			$request['udf5'] ?? ''
+			$raw_values['udf5'],
 		);
 
-		$this->logger->debug('Generated PaymentInit request', array('request' => $request));
+		$this->logger->debug(
+			'Preparing message verifier',
+			array(
+				'verifier_fields' => $verifier_fields,
+				'secret_key'      => $this->secret_key,
+				'field_order'     => array(
+					'msgName',
+					'version',
+					'id',
+					'password',
+					'amt',
+					'trackid',
+					'udf1',
+					'secret_key',
+					'udf5',
+				),
+			)
+		);
+
+		// Log the concatenated string before hashing.
+		$message = implode( '', $verifier_fields );
+		$this->logger->debug(
+			'Message string before whitespace removal',
+			array(
+				'message' => $message,
+			)
+		);
+
+		// Remove whitespace.
+		$message = preg_replace( '/\s+/', '', $message );
+		$this->logger->debug(
+			'Message string after whitespace removal',
+			array(
+				'message' => $message,
+			)
+		);
+
+		// Calculate verifier.
+		$verifier = base64_encode( hash( 'sha256', $message, true ) );
+		$this->logger->debug(
+			'Message verifier calculated',
+			array(
+				'message'  => $message,
+				'verifier' => $verifier,
+			)
+		);
+
+		$request['msgVerifier'] = $verifier;
+
+		$this->logger->debug(
+			'Final request prepared',
+			array(
+				'final_request' => $request,
+			)
+		);
 
 		return $request;
 	}

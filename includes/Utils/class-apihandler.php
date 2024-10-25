@@ -102,7 +102,7 @@ class APIHandler implements APIHandlerInterface {
 	}
 
 	/**
-	 * Send payment initialization request
+	 * Send payment initialization request.
 	 *
 	 * @param array $data Payment initialization data.
 	 * @return array Response data from the payment initialization request.
@@ -112,29 +112,28 @@ class APIHandler implements APIHandlerInterface {
 		try {
 			$payment_init = $this->prepare_payment_init_request( $data );
 
-			$this->log_debug( 'Sending PaymentInit request', array( 'request' => $payment_init ) );
+			$this->log_debug( 'Sending PaymentInit request.', array( 'request' => $payment_init ) );
 
 			$response = $this->send_request( $payment_init );
 
-			$this->log_debug( 'PaymentInit response received', array( 'response' => $response ) );
+			$this->log_debug( 'PaymentInit response received.', array( 'response' => $response ) );
 
 			if ( ! isset( $response['type'] ) || 'valid' !== $response['type'] ) {
 				throw NovaBankaIPGException::apiError(
-					isset( $response['errorDesc'] ) ? $response['errorDesc'] : 'Invalid gateway response',
+					isset( $response['errorDesc'] ) ? esc_html( $response['errorDesc'] ) : 'Invalid gateway response.',
 					$response
 				);
-			}
-
-			// Verify response signature.
-			if ( ! $this->verify_signature( $response, $response['msgVerifier'] ) ) {
-				throw NovaBankaIPGException::invalidSignature( 'Invalid PaymentInit response signature' );
 			}
 
 			return $response;
 
 		} catch ( \Exception $e ) {
-			$message = $e->getMessage();
-			throw new NovaBankaIPGException( $message, 'API_ERROR', $data, $e );
+			throw new NovaBankaIPGException(
+				esc_html( $e->getMessage() ),
+				'API_ERROR',
+				esc_html( wp_json_encode( $data ) ),
+				$e
+			);
 		}
 	}
 
@@ -147,11 +146,11 @@ class APIHandler implements APIHandlerInterface {
 	 */
 	public function handle_notification( array $notification ): array {
 		try {
-			$this->log_debug( 'Processing payment notification', array( 'notification' => $notification ) );
+			$this->log_debug( 'Processing payment notification.', array( 'notification' => $notification ) );
 
 			// Verify notification signature.
 			if ( ! $this->verify_signature( $notification, $notification['msgVerifier'] ) ) {
-				throw NovaBankaIPGException::invalidSignature( 'Invalid notification signature' );
+				throw NovaBankaIPGException::invalidSignature( 'Invalid notification signature.' );
 			}
 
 			$response = array(
@@ -172,13 +171,17 @@ class APIHandler implements APIHandlerInterface {
 				)
 			);
 
-			$this->log_debug( 'Notification response prepared', array( 'response' => $response ) );
+			$this->log_debug( 'Notification response prepared.', array( 'response' => $response ) );
 
 			return $response;
 
 		} catch ( \Exception $e ) {
-			$message = $e->getMessage();
-			throw new NovaBankaIPGException( $message, 'API_ERROR', $notification, $e );
+			throw new NovaBankaIPGException(
+				esc_html( $e->getMessage() ),
+				'NOTIFICATION_ERROR',
+				esc_html( wp_json_encode( $notification ) ),
+				esc_html( wp_json_encode( $e ) )
+			);
 		}
 	}
 
@@ -193,44 +196,49 @@ class APIHandler implements APIHandlerInterface {
 		try {
 			$refund_request = $this->prepare_refund_request( $data );
 
-			$this->log_debug( 'Sending refund request', array( 'request' => $refund_request ) );
+			$this->log_debug( 'Sending refund request.', array( 'request' => $refund_request ) );
 
 			$response = $this->send_request( $refund_request );
 
-			$this->log_debug( 'Refund response received', array( 'response' => $response ) );
+			$this->log_debug( 'Refund response received.', array( 'response' => $response ) );
 
 			if ( 'valid' !== $response['type'] ) {
 				throw NovaBankaIPGException::apiError(
-					$response['errorDesc'] ?? 'Invalid refund response',
+					isset( $response['errorDesc'] ) ? esc_html( $response['errorDesc'] ) : 'Invalid refund response.',
 					$response
 				);
 			}
 
 			// Verify response signature.
 			if ( ! $this->verify_signature( $response, $response['msgVerifier'] ) ) {
-				throw NovaBankaIPGException::invalidSignature( 'Invalid refund response signature' );
+				throw NovaBankaIPGException::invalidSignature( 'Invalid refund response signature.' );
 			}
 
 			return $response;
+
 		} catch ( \Exception $e ) {
-			$message = $e->getMessage();
-			throw new NovaBankaIPGException( $message, 'REFUND_FAILED', $data, $e );
+			throw new NovaBankaIPGException(
+				esc_html( $e->getMessage() ),
+				'REFUND_FAILED',
+				esc_html( wp_json_encode( $data ) ),
+				esc_html( wp_json_encode( $e ) )
+			);
 		}
 	}
 
 	/**
-	 * Send request to gateway
+	 * Send request to gateway.
 	 *
 	 * @param array $data Request data.
 	 * @return array
 	 * @throws NovaBankaIPGException If the request to the gateway fails or the response is invalid.
 	 */
 	private function send_request( array $data ): array {
-		// Get endpoint based on msgName from request data
+		// Get endpoint based on msgName from request data.
 		$endpoint = $this->get_api_endpoint( $data['msgName'] ?? 'PaymentInitRequest' );
 
 		$this->log_debug(
-			'Sending API request',
+			'Sending API request.',
 			array(
 				'endpoint' => $endpoint,
 				'data'     => $data,
@@ -256,14 +264,14 @@ class APIHandler implements APIHandlerInterface {
 		if ( is_wp_error( $response ) ) {
 			$error_message = $response->get_error_message();
 			$this->log_debug(
-				'API request failed',
+				'API request failed.',
 				array(
 					'error'    => $error_message,
 					'wp_error' => $response->get_error_codes(),
 				)
 			);
 			throw NovaBankaIPGException::apiError(
-				'Gateway connection failed: ' . $error_message
+				sprintf( 'Gateway connection failed: %s.', esc_html( $error_message ) )
 			);
 		}
 
@@ -272,7 +280,7 @@ class APIHandler implements APIHandlerInterface {
 		$body        = wp_remote_retrieve_body( $response );
 
 		$this->log_debug(
-			'API response received',
+			'API response received.',
 			array(
 				'status_code' => $status_code,
 				'headers'     => $headers,
@@ -284,13 +292,13 @@ class APIHandler implements APIHandlerInterface {
 
 		if ( json_last_error() !== JSON_ERROR_NONE ) {
 			$this->log_debug(
-				'Invalid JSON response',
+				'Invalid JSON response.',
 				array(
 					'json_error' => json_last_error_msg(),
 					'raw_body'   => $body,
 				)
 			);
-			throw NovaBankaIPGException::apiError( 'Invalid JSON response from gateway' );
+			throw NovaBankaIPGException::apiError( 'Invalid JSON response from gateway.' );
 		}
 
 		return $result;
@@ -301,48 +309,58 @@ class APIHandler implements APIHandlerInterface {
 	 *
 	 * @param array $data Request data.
 	 * @return array
+	 * @throws NovaBankaIPGException When track ID is missing.
 	 */
 	private function prepare_payment_init_request( array $data ): array {
-		// Base request
+		if ( empty( $data['trackid'] ) ) {
+			throw new NovaBankaIPGException( 'Track ID is required' );
+		}
+
+		// Basic request structure.
 		$request = array(
 			'msgName'            => 'PaymentInitRequest',
 			'version'            => '1',
 			'id'                 => $this->terminal_id,
 			'password'           => $this->terminal_password,
-			'action'             => $data['action'] ?? '1',
-			'currencycode'       => $data['currency'],
-			'amt'                => $this->data_handler->format_amount( $data['amount'] ),
-			'trackid'            => $data['order_id'],
+			'action'             => '1',
+			'currencycode'       => $this->data_handler->get_currency_code( $data['currency'] ),
+			'amt'                => $this->format_amount( $data['amount'] ),
+			'trackid'            => (string) $data['trackid'],
 			'responseURL'        => $data['response_url'],
 			'errorURL'           => $data['error_url'],
-			'langid'             => $data['language'] ?? 'USA',
-			'udf1'               => $data['udf1'] ?? '',
-			'buyerEmailAddress'  => $data['email'] ?? '',
+			'langid'             => $data['language'],
 			'notificationFormat' => 'json',
-			'payinst'           => 'VPAS',  // Always use 3DS
-			'RecurAction'       => '',      // Default to normal e-commerce
+			'payinst'            => 'VPAS',
+			'recurAction'        => '',
 		);
 
-		// Add 3DS data if available
-		if ( isset( $data['threeds_data'] ) ) {
-			$request = array_merge( $request, $data['threeds_data'] );
+		// Add optional fields if present.
+		if ( ! empty( $data['email'] ) ) {
+			$request['buyerEmailAddress'] = $data['email'];
 		}
 
-		// Add message verifier
-		$request['msgVerifier'] = $this->generate_message_verifier( array(
-			$request['msgName'],
-			$request['version'],
-			$request['id'],
-			$request['password'],
-			$request['amt'],
-			$request['trackid'],
-			$request['udf1'],
-			$this->secret_key,
-			isset( $request['udf5'] ) ? $request['udf5'] : ''
-		) );
+		// Add UDF fields.
+		foreach ( array( 'udf1', 'udf2', 'udf3' ) as $udf ) {
+			if ( ! empty( $data[ $udf ] ) ) {
+				$request[ $udf ] = $data[ $udf ];
+			}
+		}
 
-		$this->log_debug( 'Payment request prepared', array( 'request' => $request ) );
-		
+		// Generate message verifier.
+		$request['msgVerifier'] = $this->generate_message_verifier(
+			array(
+				$request['msgName'],
+				$request['version'],
+				$request['id'],
+				$request['password'],
+				$request['amt'],
+				$request['trackid'],
+				$request['udf1'] ?? '',
+				$this->secret_key,
+				$request['udf5'] ?? '',
+			)
+		);
+
 		return $request;
 	}
 
@@ -390,18 +408,7 @@ class APIHandler implements APIHandlerInterface {
 	 * @return bool
 	 */
 	public function verify_signature( array $data, string $signature ): bool {
-		// Implementation follows IPG documentation for specific message types.
-		$calculated = $this->generate_message_verifier( $this->get_signature_fields( $data ) );
-		return hash_equals( $signature, $calculated );
-	}
-
-	/**
-	 * Get fields for signature generation based on message type
-	 *
-	 * @param array $data Message data.
-	 * @return array
-	 */
-	private function get_signature_fields( array $data ): array {
+		// Get fields based on message type
 		$fields = array();
 
 		switch ( $data['msgName'] ) {
@@ -430,11 +437,10 @@ class APIHandler implements APIHandlerInterface {
 					$data['udf5'] ?? '',
 				);
 				break;
-
-			// Add other message types as needed.
 		}
 
-		return $fields;
+		$calculated = $this->generate_message_verifier( $fields );
+		return hash_equals( $signature, $calculated );
 	}
 
 	/**
@@ -532,5 +538,89 @@ class APIHandler implements APIHandlerInterface {
 			: 'https://ipg.novabanka.com';
 
 		return trailingslashit( $base_url ) . 'IPGWeb/servlet/' . $request_type;
+	}
+
+	/**
+	 * Format amount to two decimal places
+	 *
+	 * @param float $amount Amount to format.
+	 * @return string
+	 */
+	private function format_amount( float $amount ): string {
+		return number_format( (float) $amount, 2, '.', '' );
+	}
+
+	/**
+	 * Send API request
+	 *
+	 * @param string $endpoint API endpoint.
+	 * @param array  $data     Request data.
+	 * @return array
+	 * @throws NovaBankaIPGException When API request fails.
+	 */
+	private function send_api_request( string $endpoint, array $data ): array {
+		$this->logger->debug(
+			'Sending API request.',
+			array(
+				'endpoint' => $endpoint,
+				'data'     => $this->mask_sensitive_data( $data ),
+				'headers'  => array(
+					'Content-Type' => 'application/json',
+					'Accept'       => 'application/json',
+				),
+			)
+		);
+
+		// JSON encode the request data
+		$json_data = wp_json_encode( $data );
+		if ( false === $json_data ) {
+			throw new NovaBankaIPGException( 'Failed to encode request data as JSON' );
+		}
+
+		$response = wp_remote_post(
+			$endpoint,
+			array(
+				'headers'   => array(
+					'Content-Type' => 'application/json',
+					'Accept'       => 'application/json',
+				),
+				'body'      => $json_data,  // Send JSON encoded string
+				'timeout'   => 30,
+				'sslverify' => ! $this->test_mode,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			throw new NovaBankaIPGException(
+				'API request failed: ' . $response->get_error_message()
+			);
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		$body        = wp_remote_retrieve_body( $response );
+
+		$this->logger->debug(
+			'API response received.',
+			array(
+				'status_code' => $status_code,
+				'headers'     => wp_remote_retrieve_headers( $response ),
+				'body'        => $body,
+			)
+		);
+
+		if ( $status_code !== 200 ) {
+			throw new NovaBankaIPGException(
+				'API request failed with status code: ' . $status_code
+			);
+		}
+
+		$response_data = json_decode( $body, true );
+		if ( JSON_ERROR_NONE !== json_last_error() ) {
+			throw new NovaBankaIPGException(
+				'Failed to decode API response: ' . json_last_error_msg()
+			);
+		}
+
+		return $response_data;
 	}
 }

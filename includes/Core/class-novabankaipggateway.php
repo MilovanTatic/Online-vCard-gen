@@ -146,10 +146,10 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 			$this->get_option( 'secret_key' ),
 			$this->logger,
 			$this->data_handler,
-			$this->test_mode // Add test_mode parameter.
+			$this->test_mode
 		);
 
-		// Initialize 3DS Handler last as it depends on API Handler
+		// Initialize 3DS Handler last as it depends on API Handler.
 		$this->three_ds_handler = new ThreeDSHandler(
 			$this->api_handler,
 			$this->logger,
@@ -269,7 +269,7 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Process the payment
+	 * Process the payment.
 	 *
 	 * @param int $order_id Order ID.
 	 * @throws NovaBankaIPGException When payment processing fails.
@@ -280,68 +280,98 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 			$order = wc_get_order( $order_id );
 
 			if ( ! $order ) {
-				throw new NovaBankaIPGException( 'Order not found' );
+				throw new NovaBankaIPGException( 'Order not found.' );
 			}
 
 			$this->logger->info( 'Processing payment for order ' . $order_id );
 
-			// Get 3DS data
-			$threeds_data = $this->three_ds_handler->prepare_3ds_data(array(
-				'user_id' => $order->get_user_id(),
-				'order_id' => $order_id,
-				// Add other required data
-			));
-
 			// Initialize payment with gateway.
 			$payment_data = array(
-				'action'       => '1', // Purchase.
+				'action'       => '1',                     // Purchase transaction.
 				'amount'       => $order->get_total(),
 				'currency'     => $order->get_currency(),
-				'order_id'     => $order->get_id(),
+				'trackid'      => (string) $order->get_id(),  // Ensure trackid is a string and not null.
 				'response_url' => $this->get_return_url( $order ),
 				'error_url'    => $order->get_checkout_payment_url(),
 				'language'     => $this->get_language_code(),
 				'email'        => $order->get_billing_email(),
-				'udf1'         => wp_create_nonce( 'novabankaipg_payment_' . $order_id ),
-				'threeds_data' => $threeds_data,
+				'udf1'         => $this->get_product_sku( $order ),    // Product SKU.
+				'udf2'         => $order->get_billing_phone(),       // Phone number.
+				'udf3'         => wp_create_nonce( 'novabankaipg_payment_' . $order_id ),
+				'RecurAction'  => '',                      // Normal e-commerce transaction.
+				'payinst'      => 'VPAS',                  // Enable 3D Secure processing.
 			);
 
+			$this->logger->debug(
+				'Sending payment init request',
+				array(
+					'order_id' => $order_id,
+					'data'     => $payment_data,
+				)
+			);
+
+			// Send PaymentInit request
 			$response = $this->api_handler->send_payment_init( $payment_data );
 
-			if ( ! isset( $response['paymentid'] ) ) {
-				throw new NovaBankaIPGException( 'Invalid payment initialization response' );
+			if ( ! isset( $response['paymentid'] ) || ! isset( $response['browserRedirectionURL'] ) ) {
+				throw new NovaBankaIPGException( 'Invalid payment initialization response.' );
 			}
 
-			// Store payment ID for verification.
+			// Store payment ID
 			$order->update_meta_data( '_novabankaipg_payment_id', $response['paymentid'] );
+			$order->update_status( 'pending', __( 'Awaiting HPP payment', 'novabanka-ipg-gateway' ) );
 			$order->save();
 
-			$order->add_order_note(
-				sprintf(
-					/* translators: %s: payment ID */
-					__( 'IPG payment initialized. Payment ID: %s', 'novabanka-ipg-gateway' ),
-					$response['paymentid']
+			// Construct HPP URL
+			$hpp_url = $this->construct_hpp_url( $response );
+
+			$this->logger->debug(
+				'Redirecting to HPP',
+				array(
+					'order_id'     => $order_id,
+					'payment_id'   => $response['paymentid'],
+					'redirect_url' => $hpp_url,
 				)
 			);
 
 			return array(
 				'result'   => 'success',
-				'redirect' => $response['browserRedirectionURL'],
+				'redirect' => $hpp_url,
 			);
 
 		} catch ( NovaBankaIPGException $e ) {
 			$this->logger->error(
-				'Payment processing failed: ' . $e->getMessage(),
+				'Payment initialization failed.',
 				array(
 					'order_id' => $order_id,
 					'error'    => $e->getMessage(),
-					'data'     => $e->getData(),
 				)
 			);
-
-			wc_add_notice( $e->getMessage(), 'error' );
-			return array( 'result' => 'failure' );
+			throw $e;
 		}
+	}
+
+	/**
+	 * Construct HPP URL with payment ID
+	 *
+	 * @param array $response PaymentInit response
+	 * @return string
+	 */
+	private function construct_hpp_url( array $response ): string {
+		$base_url = $response['browserRedirectionURL'];
+
+		// Ensure URL ends with PaymentSelection.html
+		if ( strpos( $base_url, 'PaymentSelection.html' ) === false ) {
+			$base_url = rtrim( $base_url, '/' ) . '/PaymentSelection.html';
+		}
+
+		// Add paymentID parameter
+		return add_query_arg(
+			array(
+				'paymentID' => $response['paymentid'],
+			),
+			$base_url
+		);
 	}
 
 	/**
@@ -455,23 +485,26 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	 * @throws NovaBankaIPGException When payment ID does not match.
 	 */
 	protected function process_successful_payment( $order, $notification ) {
-		// Verify payment ID.
+		// Verify payment ID
 		$stored_payment_id = $order->get_meta( '_novabankaipg_payment_id' );
 
 		if ( $stored_payment_id !== $notification['paymentid'] ) {
 			throw new NovaBankaIPGException( 'Payment ID mismatch.' );
 		}
 
-		// Store transaction data.
+		// Verify notification signature before processing
+		if ( ! $this->api_handler->verify_signature( $notification, $notification['msgVerifier'] ) ) {
+			throw new NovaBankaIPGException( 'Invalid notification signature.' );
+		}
+
+		// Store transaction data
 		$order->set_transaction_id( $notification['tranid'] );
 		$order->update_meta_data( '_novabankaipg_auth_code', $notification['auth'] );
 		$order->update_meta_data( '_novabankaipg_card_type', $notification['cardtype'] );
 		$order->update_meta_data( '_novabankaipg_card_last4', $notification['cardLastFourDigits'] );
 
-		// Add order note.
 		$order->add_order_note(
 			sprintf(
-				/* translators: 1: transaction ID 2: auth code */
 				__( 'Payment completed successfully. Transaction ID: %1$s, Auth Code: %2$s', 'novabanka-ipg-gateway' ),
 				$notification['tranid'],
 				$notification['auth']
@@ -528,10 +561,45 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	 */
 	public function payment_fields() {
 		if ( $this->description ) {
-			echo wpautop( wptexturize( $this->description ) );
+			echo wp_kses_post( wpautop( wptexturize( $this->description ) ) );
 		}
-		echo '<button type="submit" class="button alt" id="novabankaipg-pay-button">' .
+		echo wp_kses(
+			'<button type="submit" class="button alt" id="novabankaipg-pay-button">' .
 			esc_html__( 'Proceed to Payment', 'novabanka-ipg-gateway' ) .
-			'</button>';
+			'</button>',
+			array(
+				'button' => array(
+					'type'  => array(),
+					'class' => array(),
+					'id'    => array(),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Get the SKU of the first product in the order.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @return string Product SKU or empty string if not found.
+	 */
+	private function get_product_sku( $order ) {
+		$items = $order->get_items();
+
+		if ( empty( $items ) ) {
+			return '';
+		}
+
+		$item = reset( $items );  // Get first item.
+		if ( ! $item ) {
+			return '';
+		}
+
+		$product = $item->get_product();
+		if ( ! $product ) {
+			return '';
+		}
+
+		return $product->get_sku() ?: '';
 	}
 }
