@@ -70,7 +70,12 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	/**
 	 * Constructor for the gateway.
 	 */
-	public function __construct() {
+	public function __construct(
+		APIHandler $api_handler = null,
+		ThreeDSHandler $three_ds_handler = null,
+		DataHandler $data_handler = null,
+		Logger $logger = null
+	) {
 		// Setup general properties.
 		$this->id                 = 'novabankaipg';
 		$this->icon               = apply_filters( 'wc_novabankaipg_icon', '' );
@@ -97,10 +102,17 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 		$this->test_mode   = 'yes' === $this->get_option( 'test_mode' );
 		$this->debug       = 'yes' === $this->get_option( 'debug' );
 
-		// Initialize components.
-		$this->init_components();
+		// Set dependencies if provided
+		if ( $api_handler && $three_ds_handler && $data_handler && $logger ) {
+			$this->api_handler      = $api_handler;
+			$this->three_ds_handler = $three_ds_handler;
+			$this->data_handler     = $data_handler;
+			$this->logger           = $logger;
+		} else {
+			$this->init_components();
+		}
 
-		// Actions.
+		// Initialize hooks
 		$this->init_hooks();
 	}
 
@@ -110,32 +122,40 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	 * @return void
 	 */
 	protected function init_components() {
-		// Initialize Logger.
+		// Initialize Logger first for debugging
 		$this->logger = new Logger( 'novabankaipg', $this->debug );
 
-		// Initialize Data Handler.
+		// Initialize Data Handler
 		$this->data_handler = new DataHandler();
 
-		// Get the API endpoint based on test mode.
-		$api_endpoint = 'yes' === $this->get_option( 'test_mode' )
+		// Get API configuration
+		$api_endpoint = $this->test_mode
 			? 'https://ipgtest.novabanka.com/IPGWeb/servlet/'
-			: 'https://ipgtest.novabanka.com/IPGWeb/servlet/';
+			: 'https://ipg.novabanka.com/IPGWeb/servlet/';
 
 		// Initialize API Handler with settings from WC_Payment_Gateway.
 		$this->api_handler = new APIHandler(
 			$api_endpoint,
 			$this->get_option( 'terminal_id' ),
-			$this->get_option( 'terminal_password' ),
+			$this->get_option( 'terminal_password' ), // Added missing parameter
 			$this->get_option( 'secret_key' ),
 			$this->logger,
 			$this->data_handler
 		);
 
-		// Initialize 3DS Handler.
+		// Initialize 3DS Handler last as it depends on API Handler
 		$this->three_ds_handler = new ThreeDSHandler(
 			$this->api_handler,
 			$this->logger,
 			$this->data_handler
+		);
+
+		$this->logger->debug(
+			'Gateway components initialized',
+			array(
+				'test_mode' => $this->test_mode,
+				'debug'     => $this->debug,
+			)
 		);
 	}
 
@@ -243,33 +263,41 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Process the payment.
+	 * Process the payment
 	 *
 	 * @param int $order_id Order ID.
 	 * @return array
-	 * @throws NovaBankaIPGException When payment initialization fails.
 	 */
 	public function process_payment( $order_id ) {
-		try {
-			$order = wc_get_order( $order_id );
+		$order = wc_get_order( $order_id );
 
-			if ( ! $order ) {
+		try {
+			if ( !$order ) {
 				throw new NovaBankaIPGException( 'Order not found' );
 			}
 
 			$this->logger->info( 'Processing payment for order ' . $order_id );
 
-			// Prepare payment data.
-			$payment_data = $this->prepare_payment_data( $order );
+			// Initialize payment with gateway
+			$payment_data = array(
+				'action' => '1', // Purchase
+				'amount' => $order->get_total(),
+				'currency' => $order->get_currency(),
+				'order_id' => $order->get_id(),
+				'response_url' => $this->get_return_url( $order ),
+				'error_url' => $order->get_checkout_payment_url(),
+				'language' => $this->get_language_code(),
+				'email' => $order->get_billing_email(),
+				'udf1' => wp_create_nonce( 'novabankaipg_payment_' . $order_id )
+			);
 
-			// Initialize payment with gateway.
 			$response = $this->api_handler->send_payment_init( $payment_data );
 
-			if ( ! isset( $response['paymentid'] ) ) {
+			if ( !isset( $response['paymentid'] ) ) {
 				throw new NovaBankaIPGException( 'Invalid payment initialization response' );
 			}
 
-			// Store payment ID for verification.
+			// Store payment ID for verification
 			$order->update_meta_data( '_novabankaipg_payment_id', $response['paymentid'] );
 			$order->save();
 
@@ -282,8 +310,8 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 			);
 
 			return array(
-				'result'   => 'success',
-				'redirect' => $response['browserRedirectionURL'],
+				'result' => 'success',
+				'redirect' => $response['browserRedirectionURL']
 			);
 
 		} catch ( NovaBankaIPGException $e ) {
@@ -292,7 +320,7 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 				array(
 					'order_id' => $order_id,
 					'error'    => $e->getMessage(),
-					'data'     => $e->getData(),
+					'data'     => $e->getData()
 				)
 			);
 
