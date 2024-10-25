@@ -17,19 +17,27 @@ interface DataHandler {
 	public function format_amount( float $amount ): string;
 
 	/**
-	 * Get currency code for IPG
+	 * Format phone number.
 	 *
-	 * @param string $currency Currency code.
-	 * @return string Currency code.
+	 * @param string $phone Phone number to format.
+	 * @return string|null Formatted phone number or null if not formatted.
 	 */
-	public function get_currency_code( string $currency ): string;
+	public function format_phone( string $phone ): ?string;
 
 	/**
-	 * Validate required fields.
+	 * Format item amount.
 	 *
-	 * @param array $data Data to validate.
-	 * @param array $required Required fields.
-	 * @return bool True if validation is successful.
+	 * @param float $amount Amount to format.
+	 * @param int   $quantity Quantity to format.
+	 * @return string Formatted amount.
 	 */
-	public function validate_required_fields( array $data, array $required ): bool;
+	public function format_item_amount( float $amount, int $quantity = 1 ): string;
+
+	/**
+	 * Validate language code.
+	 *
+	 * @param string $lang_code Language code to validate.
+	 * @return string Validated language code.
+	 */
+	public function validate_language_code( string $lang_code ): string;
 }

@@ -112,17 +112,14 @@ class NovaBankaIPGException extends \Exception {
 		$error_data = null,
 		\Throwable $previous = null
 	) {
-		$this->error_type = $error_type;
-		$this->error_data = $error_data;
-
-		$code            = self::ERROR_CODES[ $error_type ]['code'] ?? 1000;
-		$default_message = self::ERROR_CODES[ $error_type ]['message'] ?? 'Unknown error';
-
+		$error_code = self::ERROR_CODES[ $error_type ]['code'] ?? 1000;
 		parent::__construct(
-			$message ? $message : $default_message,
-			$code,
+			$message,
+			$error_code,
 			$previous
 		);
+		$this->error_type = $error_type;
+		$this->error_data = $error_data;
 	}
 
 	/**
@@ -174,5 +171,23 @@ class NovaBankaIPGException extends \Exception {
 	 */
 	public static function paymentError( string $message = '', $data = null ): self {
 		return new self( $message, 'PAYMENT_FAILED', $data );
+	}
+
+	/**
+	 * Get additional error data.
+	 *
+	 * @return mixed
+	 */
+	public function getData() {
+		return $this->error_data;
+	}
+
+	/**
+	 * Get error type.
+	 *
+	 * @return string
+	 */
+	public function getType() {
+		return $this->error_type;
 	}
 }

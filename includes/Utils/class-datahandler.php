@@ -248,4 +248,6 @@ class DataHandler {
 
 		return substr( sanitize_text_field( $description ), 0, 255 );
 	}
+
+
 }

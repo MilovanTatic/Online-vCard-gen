@@ -66,6 +66,13 @@ class APIHandler implements APIHandlerInterface {
 	private $data_handler;
 
 	/**
+	 * Test mode flag
+	 *
+	 * @var bool
+	 */
+	private $test_mode;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string      $api_endpoint      API endpoint URL.
@@ -74,6 +81,7 @@ class APIHandler implements APIHandlerInterface {
 	 * @param string      $secret_key        Secret key.
 	 * @param Logger      $logger           Logger instance.
 	 * @param DataHandler $data_handler     Data handler instance.
+	 * @param bool        $test_mode         Test mode flag.
 	 */
 	public function __construct(
 		string $api_endpoint,
@@ -81,7 +89,8 @@ class APIHandler implements APIHandlerInterface {
 		string $terminal_password,
 		string $secret_key,
 		Logger $logger,
-		DataHandler $data_handler
+		DataHandler $data_handler,
+		bool $test_mode
 	) {
 		$this->api_endpoint      = $api_endpoint;
 		$this->terminal_id       = $terminal_id;
@@ -89,6 +98,7 @@ class APIHandler implements APIHandlerInterface {
 		$this->secret_key        = $secret_key;
 		$this->logger            = $logger;
 		$this->data_handler      = $data_handler;
+		$this->test_mode         = $test_mode;
 	}
 
 	/**
@@ -216,8 +226,23 @@ class APIHandler implements APIHandlerInterface {
 	 * @throws NovaBankaIPGException If the request to the gateway fails or the response is invalid.
 	 */
 	private function send_request( array $data ): array {
+		// Get endpoint based on msgName from request data
+		$endpoint = $this->get_api_endpoint( $data['msgName'] ?? 'PaymentInitRequest' );
+
+		$this->log_debug(
+			'Sending API request',
+			array(
+				'endpoint' => $endpoint,
+				'data'     => $data,
+				'headers'  => array(
+					'Content-Type' => 'application/json',
+					'Accept'       => 'application/json',
+				),
+			)
+		);
+
 		$response = wp_remote_post(
-			$this->api_endpoint,
+			$endpoint,
 			array(
 				'body'    => wp_json_encode( $data ),
 				'timeout' => 45,
@@ -230,15 +255,41 @@ class APIHandler implements APIHandlerInterface {
 
 		if ( is_wp_error( $response ) ) {
 			$error_message = $response->get_error_message();
+			$this->log_debug(
+				'API request failed',
+				array(
+					'error'    => $error_message,
+					'wp_error' => $response->get_error_codes(),
+				)
+			);
 			throw NovaBankaIPGException::apiError(
 				'Gateway connection failed: ' . $error_message
 			);
 		}
 
-		$body   = wp_remote_retrieve_body( $response );
+		$status_code = wp_remote_retrieve_response_code( $response );
+		$headers     = wp_remote_retrieve_headers( $response );
+		$body        = wp_remote_retrieve_body( $response );
+
+		$this->log_debug(
+			'API response received',
+			array(
+				'status_code' => $status_code,
+				'headers'     => $headers,
+				'body'        => $body,
+			)
+		);
+
 		$result = json_decode( $body, true );
 
 		if ( json_last_error() !== JSON_ERROR_NONE ) {
+			$this->log_debug(
+				'Invalid JSON response',
+				array(
+					'json_error' => json_last_error_msg(),
+					'raw_body'   => $body,
+				)
+			);
 			throw NovaBankaIPGException::apiError( 'Invalid JSON response from gateway' );
 		}
 
@@ -252,14 +303,15 @@ class APIHandler implements APIHandlerInterface {
 	 * @return array
 	 */
 	private function prepare_payment_init_request( array $data ): array {
+		// Base request
 		$request = array(
 			'msgName'            => 'PaymentInitRequest',
 			'version'            => '1',
 			'id'                 => $this->terminal_id,
 			'password'           => $this->terminal_password,
-			'action'             => $data['action'] ?? '1', // Default to Purchase.
+			'action'             => $data['action'] ?? '1',
 			'currencycode'       => $data['currency'],
-			'amt'                => $this->data_handler->formatAmount( $data['amount'] ),
+			'amt'                => $this->data_handler->format_amount( $data['amount'] ),
 			'trackid'            => $data['order_id'],
 			'responseURL'        => $data['response_url'],
 			'errorURL'           => $data['error_url'],
@@ -267,23 +319,30 @@ class APIHandler implements APIHandlerInterface {
 			'udf1'               => $data['udf1'] ?? '',
 			'buyerEmailAddress'  => $data['email'] ?? '',
 			'notificationFormat' => 'json',
+			'payinst'           => 'VPAS',  // Always use 3DS
+			'RecurAction'       => '',      // Default to normal e-commerce
 		);
 
-		// Add message verifier.
-		$request['msgVerifier'] = $this->generate_message_verifier(
-			array(
-				$request['msgName'],
-				$request['version'],
-				$request['id'],
-				$request['password'],
-				$request['amt'],
-				$request['trackid'],
-				$request['udf1'],
-				$this->secret_key,
-				isset( $request['udf5'] ) ? $request['udf5'] : '',
-			)
-		);
+		// Add 3DS data if available
+		if ( isset( $data['threeds_data'] ) ) {
+			$request = array_merge( $request, $data['threeds_data'] );
+		}
 
+		// Add message verifier
+		$request['msgVerifier'] = $this->generate_message_verifier( array(
+			$request['msgName'],
+			$request['version'],
+			$request['id'],
+			$request['password'],
+			$request['amt'],
+			$request['trackid'],
+			$request['udf1'],
+			$this->secret_key,
+			isset( $request['udf5'] ) ? $request['udf5'] : ''
+		) );
+
+		$this->log_debug( 'Payment request prepared', array( 'request' => $request ) );
+		
 		return $request;
 	}
 
@@ -459,5 +518,19 @@ class APIHandler implements APIHandlerInterface {
 		if ( $this->logger ) {
 			$this->logger->debug( $message, $context );
 		}
+	}
+
+	/**
+	 * Get API endpoint based on request type
+	 *
+	 * @param string $request_type Request type.
+	 * @return string
+	 */
+	private function get_api_endpoint( string $request_type = 'PaymentInitRequest' ): string {
+		$base_url = $this->test_mode
+			? 'https://ipgtest.novabanka.com'
+			: 'https://ipg.novabanka.com';
+
+		return trailingslashit( $base_url ) . 'IPGWeb/servlet/' . $request_type;
 	}
 }

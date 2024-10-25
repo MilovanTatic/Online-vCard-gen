@@ -1,0 +1,3957 @@
+ 
+  
+Asoft IPG 
+
+Merchant Integration Guide 
+Payment 3DS 
+Version 1.12 
+
+Table of Contents 
+History of revisions................................................................................................................. 5 
+Introduction ..................................................................................................................................... 6 
+Hosted Payment Page (HPP) ................................................................................................ 6 
+3DS e-commerce transactions ........................................................................................................ 7 
+Introduction ............................................................................................................................ 7 
+The Buyer perspective .................................................................................................. 7 
+The Merchant perspective ............................................................................................ 7 
+The IPG perspective ..................................................................................................... 7 
+Diagram of information flow .......................................................................................... 8 
+Description of the steps ................................................................................................ 9 
+Merchant Integration ............................................................................................................ 10 
+Introduction ................................................................................................................. 10 
+Messages between the merchant site and IPG ........................................................... 10 
+Online messages ........................................................................................................ 11 
+Offline messages ........................................................................................................ 11 
+Message Verifier ......................................................................................................... 12 
+PaymentInit request .................................................................................................... 14 
+PaymentInit response ................................................................................................. 20 
+Notification message .................................................................................................. 20 
+Notification response .................................................................................................. 23 
+Financial Request message ........................................................................................ 23 
+Financial Response message ..................................................................................... 24 
+Payment Query Request message ............................................................................. 25 
+Payment Query Response message ........................................................................... 26 
+MOTO transactions ....................................................................................................................... 28 
+Introduction .......................................................................................................................... 28 
+The Buyer perspective ................................................................................................ 28 
+The Merchant perspective .......................................................................................... 28 
+The IPG perspective ................................................................................................... 28 
+Merchant Integration ............................................................................................................ 28 
+Introduction ................................................................................................................. 28 
+Messages between the merchant site and IPG ........................................................... 29 
+Message Verifier ......................................................................................................... 29 
+Payment Request ....................................................................................................... 30 
+Payment response ...................................................................................................... 32 
+Plug-in interface specifications ...................................................................................................... 34 
+Java plugin .......................................................................................................................... 34 
+Java IPG Demo Plugin Simulator ................................................................................ 34 
+IPG Payment Service Factory ..................................................................................... 35 
+IPG Logger Interface .................................................................................................. 35 
+IPG Payment Service Interface ................................................................................... 36 
+DLL plugin ............................................................................................................................ 37 
+Direct interface specifications ....................................................................................................... 38 
+Communication protocol specifications ................................................................................ 38 
+Data transmission format ..................................................................................................... 38 
+Data reception format .......................................................................................................... 39 
+IPG Demo Plugin .......................................................................................................................... 41 
+Test environment........................................................................................................................... 42 
+Variables to be set for the creation of PaymentInit message ................................................ 42 
+Mandatory test cases ........................................................................................................... 42 
+HPP Customization ....................................................................................................................... 44 
+Examples of Layout1 and Layout2 ....................................................................................... 45 
+Customization on Smartphones and Tablets ........................................................................ 45 
+Appendix A – Response Codes ..................................................................................................... 46 
+ 
+  Introduction 
+The Electronic Commerce service aims at brokering the cash flow from Internet sales. Merchants, who already have their own website on the Internet, are provided with a unique platform for the complete management of E-commerce transactions by credit card: 
+•
+ Online: manage all phases of the economic transaction in a secure way. 
+
+•
+ Offline: provides the Merchant with an account to access the web via the administrative interface, in which he is able to check the status of transactions, generate operational reports and proceed to the necessary accounting operations. 
+
+
+ 
+Hosted Payment Page (HPP) 
+During the payment of an e-commerce transaction with a credit card, the Merchant redirects the 
+browser of the Buyer to the Internet Payment Gateway site 
+(hereafter IPG) to enter credit card data. In this way, the Merchant reaches many significant goals: 
+•
+ The Merchant is unaware of the credit card data used by the Buyer, thus eliminating the burden of having to implement all the safety requirements, physical and logical, required by the management and storage of this type of data. 
+
+•
+ IPG is delegated the E-Commerce protocol management intended to be used and for which the service has been obtained from the bank. 
+
+•
+ The Merchant can customise the payment page presented to the Buyer, so to maintain the same look and feel of the Merchant’s site and thus creating a transparent redirection for the Buyer, without affecting their shopping experience. 
+
+
+ 
+The payment page presented by IPG to the Buyer is called Hosted Payment Page (HPP). It 
+handles all payment protocols (also known as Payment Instruments) supported by the Merchant. 
+A further benefit of this solution is the fact that should any evolutions of these protocols occur in 
+the future, or the introduction of new ones, IPG will implement them on HPP, without the Merchant needing to make any changes to his site. 
+ 
+ 
+  3DS e-commerce transactions 
+Introduction 
+This chapter aims to describe all the stages of an e-commerce transaction using the IPG platform 
+and HPP web interface on it, initially focusing on the actions carried out by each of the parties involved and then integrating them into a smooth, continuous flow of successive stages. 
+The Buyer perspective 
+To make a purchase on the Merchant site, Buyer: 
+•
+ Chooses products 
+
+•
+ Enters their personal details to allow the shipment of goods and clicks on "Buy" button. 
+
+•
+ Is redirected to the HPP. 
+
+•
+ Enters their credit card data and clicks on the "Pay" button 
+
+•
+ If the card is 3-D Secure enabled, the Buyer is redirected to their bank website to enter the password associated with the credit card, and returns to the HPP upon completion 
+
+•
+ Is redirected to a specific page on the Merchant website which displays the result of the payment 
+
+•
+ Receives an e-mail message notification of payment if the setting is enabled by the Merchant, to be used as virtual receipt 
+
+
+The Merchant perspective 
+The Merchant receives a purchase order from the Buyer and: 
+•
+ Sends a payment initialization message (PaymentInit) to IPG 
+
+•
+ Receives a unique payment code (PaymentID) in response and the URL of the HPP 
+
+•
+ Redirects the Buyer to the URL of the HPP and attaches the PaymentID information 
+
+•
+ Receives the notification of the transaction from IPG 
+
+•
+ Responds with the URL to which the Buyer should be redirected for the presentation of the transaction result 
+
+•
+ Presents the result to the Buyer 
+
+•
+ Receives an e-mail message notification of payment if the setting is enabled by the Merchant, to be used as virtual receipt 
+
+
+ 
+The IPG perspective 
+IPG receives an initialization message (PaymentInit) from the Merchant and: 
+•
+ Responds with the URL of the HPP and a transaction identification code (PaymentID) 
+
+•
+ Presents the HPP to the Buyer 
+
+•
+ Receives Credit Card data of the Buyer 
+
+•
+ If the card is 3-D Secure enabled, it redirects the Buyer to his bank’s site to enter the password associated with the credit card, and awaits the reverse redirection with the authentication result provided by the bank 
+
+•
+ Processes the transaction by sending the request to the credit card company authorisation systems and gets a response 
+
+•
+ Sends a result notification message to the Merchant 
+
+•
+ Receives the URL to redirect the Buyer in return 
+
+•
+ Redirects the Buyer to the URL received 
+
+•
+ Sends an e-mail message notification of payment to the Buyer and / or the Merchant (if the setting is enabled by the Merchant) to be used as virtual receipt. 
+
+
+Diagram of information flow 
+By integrating all the previously described activities, the result is the following pattern of actions / 
+communications that occur during a transaction between the parties involved: 
+ 
+ 
+ 
+
+Description of the steps 
+The table below presents the full flow of activities in a payment transaction: 
+ 
+Buyer  
+ Merchant 
+ Website IPG 
+ Authorisation 
+centre 
+ 
+1. Completes Shopping 
+Cart. 
+ 2. Prepares and returns the Check Out page. 
+  
+  
+ 
+3. Fills out the required 
+fields and clicks the 
+"Buy” button. 
+ 4. Prepares the HTTP 
+PaymentInit request 
+with all transaction 
+data and sends it via 
+POST to IPG. 
+ 5. After verifying the 
+validity of the request 
+received, IPG saves the transaction data, 
+associates a PaymentID to it and returns to the 
+Merchant the URL 
+where the Cardholder 
+browser must be 
+redirected and the 
+PaymentID to use in 
+redirection. 
+  
+ 
+ 
+ 6. Saves the PaymentID among other transaction data, then redirects the browser to the URL of the HPP specifying the 
+PaymentID as the GET 
+parameter. 
+ 7. After checking the 
+PaymentID received, 
+IPG prepares the 
+payment page and 
+returns it to the buyer‘s 
+browser. 
+  
+ 
+8. Enters the necessary data, and clicks the "Pay" button. 
+Note: If the Buyer 
+clicks the "Cancel" 
+button, the transaction 
+is not processed, and 
+the flow proceeds to 
+step 13. 
+  
+ 9. (if the card is enabled for 3-D Secure) Redirects the browser to an external site to authenticate the 
+Cardholder. 
+  
+ 
+10. (if the card is 
+enabled for 3-D 
+Secure) Provides their 
+authentication data to 
+the external site (the 
+site of the bank that 
+issued the credit card) 
+and, at the end, is 
+redirected to IPG. 
+  
+ 11. Receives data, 
+combines it with data 
+from the Merchant and 
+the transaction and 
+sends the request to 
+the Authorisation 
+System. 
+ 12. Receives and 
+processes the request 
+and returns the result 
+to IPG. 
+ 
+ 
+  
+ 13. Sends a POST 
+  
+ 
+
+
+message to the 
+Merchant 
+communicating the 
+result of the 
+transaction. 
+ 
+ 
+ 14. Receives the 
+message and updates 
+the transaction status 
+with the result received. It then returns the URL where 
+the buyer browser is to be redirected to for the 
+presentation of the 
+response page. 
+  
+  
+ 
+ 
+  
+ 15. Redirects the buyer 
+browser to the URL specified by the merchant in previous step and displays the final page, with details of the payment result. 
+  
+ 
+16. Receives and reviews Merchant result page. 
+  
+  
+  
+ 
+
+
+ 
+Merchant Integration 
+Introduction 
+IPG includes the presence of some direct communications with the Merchant server to complete 
+the transactions. This exchange of messages can be implemented in two ways: 
+•
+ through the installation of a special plug-in 
+
+•
+ by creating their own communication interface 
+
+
+ 
+The plug-in is easy to integrate and is compatible with all sites developed in Java, C/C++, ColdFusion, ActiveX/COM, VB, ASP, .NET. 
+ 
+If it is not possible or desirable to use the plug-in (e.g. because it is not compatible with the 
+technological platform, or the site is published via an external provider in shared hosting) it is 
+always possible, according to the specifications provided, to create your own communication 
+interface. 
+ 
+Messages between the merchant site and IPG 
+Server-to-server messages between the Merchant Site and IPG are divided into two categories: 
+•
+ Online messages: occur during the transaction (indicated with arrows filled in blue in 
+
+
+the flow diagram described in section Diagram of information flow) - their implementation is mandatory to complete the transaction successfully; 
+•
+ Offline messages: take place after the transaction processing is finished and are used by the Merchant for specific purposes - their implementation is optional. 
+
+
+Online messages 
+•
+ PaymentInit Request: initialization message sent by the Merchant to IPG (step 4 in above Diagram of information flow); 
+
+•
+ PaymentInit Response: message sent by IPG to the merchant containing URL of IPG payment page (HPP) and ID of payment initiation request (Payment ID) - step 5 in above Diagram of information flow; 
+
+•
+ Notification: message sent by IPG to the Merchant containing transaction results (step 13 in above Diagram of information flow); 
+
+•
+ Notification Response: message sent by the merchant to IPG containing final redirection URL (step 14 in above Diagram of information flow); 
+
+
+ 
+Offline messages 
+Payment Request - After the payment, the Merchant proceeds with the order. Subsequently, various accounting transactions may be required: for instance, the account crediting (if the transaction did not involve automatic crediting) to the repayment of the Customer in the event of returned goods, and so on.  
+IPG offers the ability to manage these requirements quickly and effectively. It is possible to carry 
+the operations out in 2 ways: 
+•
+ By connecting to the BackOffice site and using the features therein 
+
+•
+ By sending the request directly from the system to IPG, using the Payment message, in which all of the original transaction parameters must be entered and the appropriate action code is to be set. In 
+
+
+ 
+PaymentQuery - allows the Merchant to contact IPG to know in real time, at every 
+moment, the processing status and details of a particular transaction. 
+ 
+  
+Message Verifier 
+ 
+All messages exchanged between Merchant Site and IPG are signed using Message Verifier (msgVerifier) which is dynamically composed of specific message data (see bellow message specifications). 
+Steps for Message Verifier generation are: 
+a) Concatenate specified message data to create Message Verifier string; 
+b) Remove spaces (if exists) 
+c) Hash the string created in previous step using SHA256 algorithm to get HASH bytes 
+d) Base64 the HASH bytes to create final msgVerifier field value. 
+Example of Message Verifier creation for PaymentInit request message - 
+Message data 
+ Value 
+ 
+msgName 
+ “PaymentInitRequest” 
+ 
+version 
+ “1” 
+ 
+id 
+ “89110001” 
+ 
+password 
+ “test1234” 
+ 
+amt 
+ “15.00” 
+ 
+trackid 
+ “CTV-TEST-PureBuy-1” 
+ 
+udf1 
+ “AA” 
+ 
+SECRET KEY 
+ “YXKZPOQ9RRLGPDED5D3PC5BJ” 
+ 
+udf5 
+ “EE “ 
+ 
+
+
+ 
+a) Concatenate msgName, version, id, password, amt, trackid, udf1, SECRET KEY and udf5: 
+“PaymentInitRequest189110001test123415.00CTV-TEST-PureBuy-1AAYXKZPOQ9RRLGPDED5D3PC5BJEE “ 
+ 
+b) Remove spaces: 
+ 
+“PaymentInitRequest189110001test123415.00CTV-TEST-PureBuy-1AAYXKZPOQ9RRLGPDED5D3PC5BJEE” 
+ 
+c) Hash of step (b) value using SHA256 algorithm to generate hash bytes:  
+ 
+B3A54617D2E9ACD9079D85EA15D066A5892E3CABE1B41DA4891B3A65FFAA0CCE 
+ 
+d) Base64 of step (c) value to generate final msgVerifier value:  
+ 
+s6VGF9LprNkHnYXqFdBmpYkuPKvhtB2kiRs6Zf+qDM4= 
+ 
+ 
+  
+Following is Java code example to message verifier calculation: 
+  
+public static void main(String[] args) { 
+ try { 
+ 
+   // https://hash.online-convert.com/sha256-generator    
+   String messageVerifierBase = "PaymentInitRequest189110001test123415.00CTV-TEST-PureBuy-1AAYXKZPOQ9RRLGPDED5D3PC5BJEE"; 
+   System.out.println("messageVerifierBase=" + messageVerifierBase); 
+    
+   MessageDigest digest = MessageDigest.getInstance("SHA-256"); 
+   byte[] messageVerifierBase64Hash = digest.digest(messageVerifierBase.getBytes()); 
+   System.out.println("SHA256(messageVerifierBase)=" + byteArrayToHex(messageVerifierBase64Hash)); 
+ 
+   String msgVerifier = Base64Codec.encodeBytes(messageVerifierBase64Hash); 
+   System.out.println("msgVerifier=Base64(SHA256(messageVerifierBase)=" + msgVerifier); 
+             
+  } catch (Throwable t) { 
+t.printStackTrace(); 
+  } 
+} 
+ 
+public static String byteArrayToHex(byte[] bytes) { 
+  StringBuilder result = new StringBuilder(bytes.length * 2); 
+  for (byte singleByte : bytes) { 
+    result.append(String.format("%02x", singleByte).toUpperCase()); 
+  } 
+  return result.toString(); 
+ } 
+ 
+Following is printed on Java console: 
+ 
+messageVerifierBase=PaymentInitRequest189110001test123415.00CTV-TEST-PureBuy-1AAYXKZPOQ9RRLGPDED5D3PC5BJEE 
+SHA256(messageVerifierBase)=B3A54617D2E9ACD9079D85EA15D066A5892E3CABE1B41DA4891B3A65FFAA0CCE  
+msgVerifier=Base64(SHA256(messageVerifierBase))=s6VGF9LprNkHnYXqFdBmpYkuPKvhtB2kiRs6Zf+qDM4= 
+ 
+Note: if Base64(SHA256(messageVerifierBase)) calculation results with different string value, common issue is related to the value of messageVerifierBase.  
+Message verifier base must match fields from specific fields from request or response message.  
+For example: purchase amount value (15.00) takes part in the message verifier calculation, but different purchase amount value is provided in the JSON message (15). 
+  
+The same message verifier value could be calculated via https://hash.online-convert.com/sha256-generator: 
+ 
+ 
+
+ 
+ 
+After clicking on START, following result is displayed: 
+ 
+ 
+
+  
+PaymentInit request 
+This message is sent by the Merchant to IPG to start a transaction. It uses the following items: 
+ 
+<Request> 
+ 
+1st 
+levTag 
+ 2nd 
+levTag 
+ 3rd 
+lev Tag 
+ Mand. 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+  
+ M 
+ 30 
+ “PaymentInitRequest” 
+ 
+<version> 
+  
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<id> 
+  
+  
+ M 
+ 8 
+ TranPortalID - TranPortalID, assigned during activation of the service 
+ 
+<password> 
+  
+  
+ M 
+ 16 
+ Password associated with TranPortalID 
+ 
+<payinst> 
+  
+  
+ O 
+ 20 
+ "CC"/"VPAS"/"IP"/"MPASS"/"MYBANK" - to be specified if Merchant wants to show only one specific payment Instrument. 
+ 
+<action> 
+  
+  
+ M 
+ 2 
+ Type of transaction: 
+1=Purchase 
+4=Authorization 
+14 = Card Verification 
+ 
+<currencycode> 
+  
+  
+ M 
+ 3 
+ Currency code 
+ 
+<amt> 
+  
+  
+ M 
+ 10.2 
+ Transaction amount 
+(NNNNNNNNNN.NN format 
+Max. Val. 9999999999.99). 
+ 
+<trackid> 
+  
+  
+ M 
+ 255 
+ Order identification code set by the Merchant. It is advisable that this code is unique to each transaction. 
+ 
+<RecurAction> 
+  
+  
+ M 
+ 10 
+ Possible Values (case insensitive): 
+“” – indicates a normal e-commerce order 
+“activation” – indicates that the Merchant requires a new Recurring Payment to be activated with this order 
+“consumer_initiated” – indicates card-on-file consumer initiated payment 
+ 
+<RecurContractId> 
+  
+  
+ O 
+ 30 
+ Optional information to collect the Recurring Payment Contract Identifier. 
+ 
+<recurid> 
+  
+  
+ C 
+ 20 
+ Recurring Payment identifier. Mandatory if <RecurAction>=”consumer_initiated” in the PaymentInit request and terminal is enabled to Rec. Pymnts.  
+ 
+<pymnDscr> 
+  
+  
+ O 
+ 255 
+ Recurring Payment description 
+ 
+<cardSHA2> 
+  
+  
+ O 
+ 1 
+ “Y” / “N” to receive the card SHA-2 hash in the notification message  
+ 
+<paymentTimeout> 
+  
+  
+ O 
+ 2 
+ payment session validity (from the paymentInit time) – in number of minutes. If not present, IPG default value is used . 
+ 
+ 
+  
+  
+  
+  
+  
+ 
+<bankStmtFreeText> 
+  
+  
+ O 
+ 50 
+ Free Text that will be forwarded to Auth System in p127, to be printed on bank account statement. 
+ 
+<instructedFees> 
+  
+  
+ O 
+ 255 
+ Text field that can host any fees that could be applied to the original amount. 
+ 
+
+
+<responseURL> 
+  
+  
+ M 
+ 255 
+ URL used by IPG to send Notification Message to the Merchant. 
+ 
+<errorURL> 
+  
+  
+ M 
+ 384 
+ URL towards which IPG redirects the Buyer in case that any problem occurs when sending the Notification Message. 
+ 
+<notificationFormat> 
+  
+  
+ O 
+ 10 
+ Optional field to specify the format of the Notification Message sent by IPG. Possible values: 
+- “xml” – msg is sent in xml format 
+- “form” – msg is sent as a HTML form (nvp) 
+If empty, the default value is “xml”. Values different from those specified will generate a validation error. 
+ 
+<paymentPageMode> 
+  
+  
+ O 
+ 1 
+ Payment Page mode 
+0 = Standard (the customer's browser is redirected to the payment page) 
+1 = Light Box (the payment page is presented on the merchant page). 
+If omitted, the Standard option is assumed. 
+ 
+<langid> 
+  
+  
+ M 
+ 3 
+ Code to set the language in which HPP will be displayed and for notification email. The following are supported: 
+"ITA" = Italian 
+"USA" = English 
+"FRA" = French 
+"DEU" = German 
+"ESP" = Spanish 
+"SLO" = Slovenian 
+"SRB" = Serbian 
+"POR" = Portuguese 
+"RUS" = Russian 
+ 
+<udf1> 
+  
+  
+ O 
+ 255 
+ User free field 1. 
+Field at the discretion of the Merchant used for an additional information. 
+ 
+<udf2> 
+  
+  
+ O 
+ 255 
+ User free field 2 
+ 
+<udf3> 
+  
+  
+ O 
+ 255 
+ User free field 3 
+ 
+<udf4> 
+  
+  
+ O 
+ 255 
+ User free field 4 
+ 
+<udf5> 
+  
+  
+ O 
+ 255 
+ User free field 5 
+ 
+<buyerFirstName> 
+  
+  
+ O 
+ 50 
+ Buyer first name 
+ 
+<buyerLastName> 
+  
+  
+ O 
+ 50 
+ Buyer last name 
+ 
+<buyerUserId> 
+  
+  
+ O 
+ 50 
+ UserId with which the buyer is registered at the merchant web site 
+ 
+<buyerPhoneNumber> 
+  
+  
+ O 
+ 20 
+ Buyer phone number 
+ 
+<buyerEmailAddress> 
+  
+  
+ O 
+ 255 
+ Allows you to pre-set the email field that the 
+Buyer can enter on the payment page to 
+receive transaction e-mail receipt (option only 
+possible if the Merchant has enabled the sending email function to the Buyer using the back office). 
+ 
+<cartContent> 
+  
+  
+ O 
+  
+ Shopping cart content. 
+ 
+ 
+ <item> 
+  
+ C 
+  
+ [1..n] <item> tags if <cartContent> is present 
+ 
+ 
+  
+ <productId> 
+ M 
+ 30 
+ product identifier 
+ 
+ 
+  
+ <productDesc> 
+ O 
+ 255 
+ product description 
+ 
+ 
+  
+ <qty> 
+ M 
+ 8 
+ product quantity in the cart 
+ 
+
+
+ 
+  
+ <singlePrice> 
+ M 
+ 10.2 
+ product single price  
+ 
+<shippingInfo> 
+  
+  
+ O 
+  
+ Shipping Details 
+ 
+ 
+ <recipientFirstName> 
+  
+ C 
+ 50 
+ Recipient First Name. Mandatory if <shippingInfo> is present. 
+ 
+ 
+ <recipientLastName> 
+  
+ C 
+ 50 
+ Recipient Last Name. Mandatory if <shippingInfo> is present. 
+ 
+ 
+ <recipientPhoneNumber> 
+  
+ O 
+ 20 
+ Recipient Phone Number. 
+ 
+ 
+ <ShippingAddress> 
+  
+ C 
+  
+ Shipping Address. Mandatory if <shippingInfo> is present 
+ 
+ 
+  
+ <country> 
+ C 
+ 3 
+ Shipping Country. Mandatory if <buyerShippingAddress> is present. ISO 3166-1 (Alpha 3) format required. 
+ 
+ 
+  
+ <city> 
+ C 
+ 40 
+ Shipping City. Mandatory if <buyerShippingAddress> is present 
+ 
+ 
+  
+ <zip> 
+ C 
+ 20 
+ Shipping Postal Code. Mandatory if <buyerShippingAddress> is present 
+ 
+ 
+  
+ <addrLine1> 
+ C 
+ 100 
+ Shipping Address Line 1 (Street name, number). Mandatory if <buyerShippingAddress> is present 
+ 
+ 
+  
+ <addrLine2> 
+ O 
+ 100 
+ Shipping Address Line 2 (apt number, suite, etc) 
+ 
+ 
+  
+ <addrLine3> 
+ O 
+ 40 
+ Shipping Address Line 3 (all info not containable in first 2 lines) 
+ 
+<billingInfo> 
+  
+  
+ O 
+  
+ Billing Details 
+ 
+ 
+ <billingFirstName> 
+  
+ C 
+ 50 
+ First name of the billed person. Mandatory if <billingInfo> is present 
+ 
+ 
+ <billingLastName> 
+  
+ C 
+ 50 
+ Last name of the billed person. Mandatory if <billingInfo> is present 
+ 
+ 
+ <billingAddress> 
+  
+ C 
+  
+ Billing Address. Mandatory if <billingInfo> is present  
+ 
+ 
+  
+ <country> 
+ C 
+ 3 
+ Billing Country. Mandatory if <billingAddress> is present. ISO 3166-1 (Alpha 3) format required. 
+ 
+ 
+  
+ <city> 
+ C 
+ 40 
+ Billing City. Mandatory if <billingAddress> is present 
+ 
+ 
+  
+ <zip> 
+ C 
+ 20 
+ Billing Postal Code. Mandatory if <billingAddress> is present 
+ 
+ 
+  
+ <addrLine1> 
+ C 
+ 100 
+ Billing Address Line 1 (Street name, number). Mandatory if <billingAddress> is present 
+ 
+ 
+  
+ <addrLine2> 
+ O 
+ 100 
+ Billing Address Line 2 (Street name, number) 
+ 
+ 
+  
+ <addrLine3> 
+ O 
+ 40 
+ Billing Address Line 3 (all info not containable in first 2 lines) 
+ 
+<acctType> 
+  
+  
+ O 
+ 2 
+ Account Type 
+Accepted Values: 
+01 = Not Applicable 
+02 = Credit 
+03 = Debit 
+ 
+<acctInfo> 
+ <chAccAgeInd> 
+  
+ O 
+ 2 
+ Length of time that the cardholder has had the account with the merchant. 
+Accepted Values: 
+01 = No account (guest check-out) 
+02 = Created during this transaction 
+03 = Less than 30 days 
+04 = 30−60 days 
+05 = More than 60 days 
+ 
+ 
+ <chAccDate> 
+  
+ O 
+ 8 
+ Date that the cardholder opened the account with the merchant. 
+ 
+
+
+Format accepted: 
+Date format = YYYYMMDD 
+ 
+ 
+ <chAccChangeInd> 
+  
+ O 
+ 2 
+ Length of time since the cardholder’s account information with the merchant was last changed. 
+Accepted Values: 
+01 = Changed during this transaction 
+02 = Less than 30 days 
+03 = 30−60 days 
+04 = More than 60 days 
+ 
+ 
+ <chAccChange> 
+  
+ O 
+ 8 
+ Date that the cardholder’s account with the merchant was last changed. 
+Format accepted: 
+Date format = YYYYMMDD 
+ 
+ 
+ <chAccPwChangeInd> 
+  
+ O 
+ 2 
+ Indicates the length of time since the cardholder’s account with the merchant had a password change or account reset. 
+Accepted Values: 
+01 = No change 
+02 = Changed during this transaction 
+03 = Less than 30 days 
+04 = 30−60 days 
+05 = More than 60 days 
+ 
+ 
+ <chAccPwChange> 
+  
+ O 
+ 8 
+ Date that cardholder’s account with the merchant had a password change or account reset. 
+Format accepted: 
+Date format = YYYYMMDD 
+ 
+ 
+ <shipAddressUsageInd> 
+  
+ O 
+ 2 
+ Indicates when the shipping address used for this transaction was first used with the merchant. 
+Accepted Values: 
+01 = This transaction 
+02 = Less than 30 days 
+03 = 30−60 days 
+04 = More than 60 days 
+ 
+ 
+ <shipAddressUsage> 
+  
+ O 
+ 8 
+ Date when the shipping address used for this transaction was first used with the merchant. 
+Format accepted: 
+Date format = YYYYMMDD 
+ 
+ 
+ <txnActivityDay> 
+  
+ O 
+ 3 
+ Number of transactions (successful and abandoned) for this cardholder account with the merchant across all payment accounts in the previous 24 hours. 
+ 
+ 
+ <txnActivityYear> 
+  
+ O 
+ 3 
+ Number of transactions (successful and abandoned) for this cardholder account with the merchant across all payment accounts in the previous year. 
+ 
+ 
+ <provisionAttemptsDay> 
+  
+ O 
+ 3 
+ Number of Add Card attempts in the last 24 hours. 
+ 
+ 
+ <nbPurchaseAccount> 
+  
+ O 
+ 4 
+ Number of purchases with this cardholder account during the previous six months. 
+ 
+ 
+ <suspiciousAccActivity> 
+  
+ O 
+ 2 
+ Indicates whether the merchant has experienced suspicious activity on the cardholder account. 
+Values accepted: 
+01 = No suspicious activity has been observed 
+02 = Suspicious activity has been observed 
+ 
+
+
+ 
+ <shipNameIndicator> 
+  
+ O 
+ 2 
+ Indicates if the Cardholder Name on the account is identical to the shipping Name used for this transaction. 
+Values accepted: 
+• 01 = Account Name identical to shipping Name 
+• 02 = Account Name different than shipping Name 
+ 
+ 
+ <paymentAccInd> 
+  
+ O 
+ 2 
+ Indicates the length of time that the payment account was enrolled in the cardholder’s account with the merchant. 
+Values accepted: 
+01 = No account (guest check-out) 
+02 = During this transaction 
+03 = Less than 30 days 
+04 = 30−60 days 
+05 = More than 60 days 
+ 
+ 
+ <paymentAccAge> 
+  
+ O 
+ 8 
+ Date that the payment account was enrolled in the cardholder’s account with the merchant. 
+Format accepted: 
+Date format = YYYYMMDD 
+ 
+<threeDSRequestorAuthenticationInfo> 
+ <threeDSReqAuthMethod> 
+  
+ O 
+ 2 
+ Mechanism used by the Cardholder to authenticate to the merchant. 
+Values accepted: 
+01 = No merchant authentication occurred (i.e. cardholder “logged in” as guest) 
+02 = Login to the cardholder account at the 3DS Requestor system using merchant’s own credentials 
+03 = Login to the cardholder account at the merchant system using federated ID 
+04 = Login to the cardholder account at the merchant system using issuer credentials 
+05 = Login to the cardholder account at the merchant system using third-party authentication 
+06 = Login to the cardholder account at the merchant system using FIDO Authenticator 
+07 = Login to the cardholder account at the merchant system using FIDO Authenticator (FIDO assurance data signed) 
+08 = SRC Assurance Data 
+ 
+ 
+ <threeDSReqAuthTimestamp> 
+  
+ O 
+ 12 
+ Date and time in UTC of the cardholder authentication. 
+Format accepted: 
+Date format = YYYYMMDDHHMM 
+ 
+ 
+ <threeDSReqAuthData> 
+  
+ O 
+ 20000 
+ Data that documents and supports a specific authentication process. 
+ 
+<threeDSRequestorPriorAuthenticationInfo> 
+ <threeDSReqPriorAuthMethod> 
+  
+ O 
+ 2 
+ Mechanism used by the Cardholder to previously authenticate to the merchant. 
+Values accepted: 
+• 01 = Frictionless authentication occurred by ACS 
+• 02 = Cardholder challenge occurred by ACS 
+• 03 = AVS verified 
+• 04 = Other issuer methods 
+ 
+ 
+ <threeDSReqPriorRef> 
+  
+ O 
+ 36 
+ This data element provides additional information to the ACS to determine the best approach for handing a request. 
+Value accepted: 
+ 
+
+
+This data element contains an ACS Transaction ID for a prior authenticated transaction (for example, the first recurring transaction that was authenticated with the cardholder). 
+ 
+ 
+ <threeDSReqPriorAuthTimestamp> 
+  
+ O 
+ 12 
+ Date and time in UTC of the prior cardholder authentication. 
+Format accepted: 
+Date format = YYYYMMDDHHMM 
+ 
+ 
+ <threeDSReqPriorAuthData> 
+  
+ O 
+ 2048 
+ Data that documents and supports a specific authentication process. 
+ 
+<msgVerifier> 
+  
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+msgName + version + id + password + amt + trackid + udf1 + SECRET KEY + udf5 
+ 
+
+
+PaymentInit response 
+The response, that IPG returns to Merchant after getting PaymentInit request and having verified 
+the validity, contains the following fields: 
+ 
+<Response> 
+  
+ contains an attribute “type” whose value can be: “valid” or “error” 
+ 
+1st 
+levTag 
+ Response Type 
+ Mand. 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+ M 
+ 30 
+ “PaymentInitResponse” 
+ 
+<version> 
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<msgDateTime> 
+  
+ M 
+ 24 
+ Message creation date/time, in UTC format 
+ 
+<paymentID> 
+ valid 
+ M 
+ 20 
+ Order PaymentID.  
+ 
+<browserRedirectionURL> 
+ valid 
+ M 
+ 256 
+ IPG URL for browser redirection. 
+ 
+<errorCode> 
+ error 
+ M 
+ 20 
+ Error Code returned by IPG.  
+ 
+<errorService> 
+ error 
+ M 
+ 30 
+ Error Service returned by IPG. 
+ 
+<errorDesc> 
+ error 
+ M 
+ 256 
+ Error Description returned by IPG. 
+ 
+<msgVerifier> 
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+1)
+ If type=”valid”: msgName + version + msgDateTime + paymentID + SECRET KEY + browserRedirectionURL 
+
+2)
+ If type=”error”: msgName + version + msgDateTime + errorCode + SECRET KEY + errorDesc 
+
+
+ 
+IMP.: Considerations reported at REQ11 of par. 4.1 apply 
+ 
+
+
+ 
+Notification message 
+After payment processing, IPG sends this message to inform the Merchant of the transaction result (if it has been processed) or the error reason (if it has not been processed). The messages exchanged can be formatted in xml or as a html form (nvp), based on the value of the NotificationFormat field of the PaymentInit message. The default, if not specified, is the xml format. 
+ 
+Notification message in the case of xml format has the following structure: 
+ 
+<Request> 
+  
+  
+  
+ contains an attribute “type” whose value can be: “valid” or “error” 
+  
+ 
+1st 
+levTag 
+ 2rd 
+lev Tag 
+ Response Type 
+ Mand. 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+  
+ M 
+ 30 
+ “PaymentNotificationRequest” 
+ 
+<version> 
+  
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<msgDateTime> 
+  
+  
+ M 
+ 24 
+ Message creation date/time, in UTC format 
+ 
+<paymentID> 
+  
+  
+ M 
+ 20 
+ Order PaymentID. 
+ 
+<tranID> 
+  
+ valid 
+ M 
+ 20 
+ TransactionID. 
+ 
+<action> 
+  
+ valid 
+ M 
+ 2 
+ Action code. 
+ 
+<payinst> 
+  
+ valid 
+ M 
+ 20 
+ Payment Instrument used for the transaction.  
+ 
+<result> 
+  
+ valid 
+ M 
+ 20 
+ Result of the operation: 
+"APPROVED" = Successful preauthorization 
+"NOT APPROVED" = Not Authorized preauthorization 
+"CAPTURED" = Successful purchase  
+"NOT CAPTURED" = Not Authorized purchase 
+"DENIED BY RISK" = Not processed due to failure to pass any risk criteria imposed by banks 
+"HOST TIMEOUT" = Not processed due to no reply by the authorization system 
+"ISSUER UNAVAILABLE" = Not processed due to failed connection with the authorization system 
+ 
+<auth> 
+  
+ valid 
+ M 
+ 35 
+ Auth Code. 
+ 
+<currencycode> 
+  
+ valid 
+ M 
+ 3 
+ Currency code. 
+ 
+<amt> 
+  
+ valid 
+ M 
+ 10.2 
+ nnnnnnnnnn.nn. 
+ 
+<trackid> 
+  
+ valid 
+ M 
+ 255 
+ Merchant TrackId. 
+ 
+<ref> 
+  
+ valid 
+ M 
+ 20 
+ Auth system ref number. Mandatory if payinst = “CC”/”VPAS” /"IP"/”MPASS” 
+ 
+<responsecode> 
+  
+ valid 
+ M 
+ 3 
+ Host Response Code. Mandatory if payinst = “CC”/”VPAS” /"IP"/”MPASS” 
+ 
+<cardtype> 
+  
+ valid 
+ M 
+ 10 
+ Brand Id. Mandatory if payinst = “CC”/”VPAS” /"IP"/”MPASS” 
+ 
+<liability> 
+  
+ valid 
+ M 
+ 1 
+ “Y” / “N”. Mandatory if payinst = “CC”/”VPAS” /"IP"/”MPASS” 
+ 
+<RecurContractID> 
+  
+ valid 
+ O 
+ 30 
+ Recurring Payment Contract Identifier. 
+ 
+<recurid> 
+  
+ valid 
+ C 
+ 20 
+ Recurring Payment identifier. Only if Merchant specified <RecurAction>=”ACTIVATION” in the PaymentInit request and terminal is enabled to Rec. Pymnts.  
+ 
+<expDate> 
+  
+ valid 
+ M 
+ 6 
+ Card expiry date 
+ 
+<cardLastFourDigits> 
+  
+ valid 
+ M 
+ 4 
+ Card last 4 digits 
+ 
+<cardCountry> 
+  
+ valid 
+ M 
+ 2 
+ card country. Only if payinst = “CC”,”VPAS”,”MPASS” 
+ 
+<ipCountry> 
+  
+ valid 
+ M 
+ 2 
+ IP address country 
+ 
+<cardSHA2> 
+  
+ valid 
+ C 
+ 32 
+ card number hash value, using sha2 (256) algorithm. Only if Merchant specified the <cardSha2> = “Y” field in the PaymentInit request and payinst = “CC”,”VPAS”,”MPASS” 
+ 
+<udf1> 
+  
+ valid 
+ O 
+ 255 
+ user free field 1 
+ 
+<udf2> 
+  
+ valid 
+ O 
+ 255 
+ user free field 2 
+ 
+<udf3> 
+  
+ valid 
+ O 
+ 255 
+ user free field 3 
+ 
+<udf4> 
+  
+ valid 
+ O 
+ 255 
+ user free field 4 
+ 
+<udf5> 
+  
+ valid 
+ O 
+ 255 
+ user free field 5 
+ 
+
+
+<riskLevel> 
+  
+ valid 
+ C 
+ 20 
+ Risk Level (“GREEN”/”YELLOW”/”RED”) – Only if and terminal is Smash enabled. 
+ 
+<riskThreshold> 
+  
+ valid 
+ C 
+ 4 
+ Risk treshold (score that defines the borderline between GREEN and YELLOW zones) – Only if terminal is Smash enabled 
+ 
+<riskScore> 
+  
+ valid 
+ C 
+ 4 
+ Risk score – Only if terminal is Smash enabled. 
+ 
+<riskMaxScore> 
+  
+ valid 
+ C 
+ 4 
+ Max Risk Score for the risk policy that assessed the transaction (sum of “scoreConfigured” values returned by SMASH) – Only if terminal is Smash enabled. 
+ 
+<myBankBuyerBankAlias> 
+  
+ valid 
+ C 
+ 256 
+ Alias of the Buyer Bank choosen by the buyer. Only if payInst=”MYBANK” 
+ 
+<mpShippingFlag> 
+  
+ valid 
+ C 
+ 3 
+ MasterPass shipping flag configured by the Merchant in GUI: “SUP”/”NOT”/”DYN”. Only if payInst=”MPASS”. –  Future use –  
+ 
+ 
+ <mpShippingOption> 
+ valid 
+ C 
+ 20 
+ MasterPass shipping option choosen by the buyer after wallet comeback. Only if payInst=”MPASS” and if <mpShippingFlag>=”DYN”. –  Future use – 
+ 
+ 
+ <mpShippingRecipientName> 
+ valid 
+ C 
+ 100 
+ Recipient Name. Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+ 
+ <mpShippingRecipientPhoneNumber> 
+ valid 
+ C 
+ 20 
+ Recipient Phone Number. Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+ 
+ <mpShippingCountry> 
+ valid 
+ C 
+ 2 
+ Shipping Country. Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+ 
+ <mpShippingCountrySubdivision> 
+ valid 
+ C 
+ 5 
+ Shipping country subdivision. Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+ 
+ <mpShippingCity> 
+ valid 
+ C 
+ 25 
+ Shipping City. Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+ 
+ <mpShippingpostalCode> 
+ valid 
+ C 
+ 20 
+ Shipping Postal Code. Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+ 
+ <mpAddrLine1> 
+ valid 
+ C 
+ 40 
+ Shipping Address Line 1 (Street name, number). Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+ 
+ <mpAddrLine2> 
+ valid 
+ O 
+ 40 
+ Shipping Address Line 2 (apt number, suite, etc). Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+ 
+ <mpAddrLine3> 
+ valid 
+ O 
+ 256 
+ Shipping Address Line 3 (all info not containable in first 2 lines). Only if payInst=”MPASS” and if <mpShippingFlag>=”NOT”. –  Future use – 
+ 
+<errorCode> 
+  
+ error 
+ M 
+ 20 
+ Error Code returned by IPG. 
+ 
+<errorService> 
+  
+ error 
+ M 
+ 30 
+ Error Service returned by IPG. 
+ 
+<errorDesc> 
+  
+ error 
+ M 
+ 256 
+ Error Description returned by IPG. 
+ 
+<msgVerifier> 
+  
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+1)
+ If type=”valid”: msgName + version + msgDateTime + paymentid + tranid + amt + trackid + udf1 + SECRET KEY + udf5 
+
+2)
+ If type=”error”: msgName + version + msgDateTime + paymentid + errorCode + SECRET KEY + errorDesc 
+
+
+ 
+
+
+ 
+ 
+Notification response 
+In Notification response, the Merchant sends the URL to which he wants the Customer to be redirected for the presentation of the result page. 
+The merchant Notification response message must follow the same format chosen for the Notification request. In the xml case the structure is the following: 
+ 
+<Response> 
+ 
+1st 
+levTag 
+ 2nd 
+levTag 
+ 3rd 
+lev Tag 
+ Mand. 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+  
+ M 
+ 30 
+ “PaymentNotificationResponse” 
+ 
+<version> 
+  
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<paymentID> 
+  
+  
+ M 
+ 20 
+ Order PaymentID 
+ 
+<browserRedirectionURL> 
+  
+  
+ M 
+ 512 
+ URL for the final browser redirection to the Merchant website 
+ 
+<msgVerifier> 
+  
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256). 
+String to hash in this exact order (only fields values, not tags): 
+msgName + version + paymentID + SECRET KEY + browserRedirectionURL 
+ 
+
+
+ 
+ 
+ 
+Financial Request message 
+Through a simple exchange of server-to-server messages, the Merchant can make automated 
+financial operations (Credit, Capture, Purchase Reversal and Void Preauthorization) remotely. 
+ 
+The fields to be included in the request message are: 
+<Request> 
+ 
+1st 
+levTag 
+  
+  
+ Mand 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+  
+ M 
+ 30 
+ “FinancialRequest” 
+ 
+<version> 
+  
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<id> 
+  
+  
+ M 
+ 8 
+ TranPortalID, assigned during activation of the 
+service 
+ 
+<password> 
+  
+  
+ M 
+ 16 
+ Password associated with TranPortalID 
+ 
+<tranid> 
+  
+  
+ M 
+ 20 
+ Unique identification code of the original 
+transaction, created by IPG and communicated to the Merchant in the Notification Message 
+ 
+<action> 
+  
+  
+ M 
+ 2 
+ Type of action: 
+2 = Credit 
+3 = Purchase Reversal 
+5 = Capture 
+9 = Void Preauthorization 
+ 
+<currencycode> 
+  
+  
+ O 
+ 3 
+ currency code 
+ 
+<amt> 
+  
+  
+ M 
+ 10.2 
+ operation amount (nnnnnnnnnn.nn) 
+ 
+<trackid> 
+  
+  
+ M 
+ 255 
+ Identification code associated with the order by the Merchant. Usually this is the identification code of the purchase order on the Merchant site. It is advisable that this code is unique to each transaction. 
+ 
+
+
+<udf1> 
+  
+  
+ O 
+ 255 
+ Field entry at the discretion of the Merchant and returned unchanged by IPG. 
+ 
+<udf2> 
+  
+  
+ O 
+ 255 
+ Field entry at the discretion of the Merchant and returned unchanged by IPG. 
+ 
+<udf3> 
+  
+  
+ O 
+ 255 
+ Field entry at the discretion of the Merchant and returned unchanged by IPG. 
+ 
+<udf4> 
+  
+  
+ O 
+ 255 
+ Field entry at the discretion of the Merchant and returned unchanged by IPG. 
+ 
+<udf5> 
+  
+  
+ O 
+ 255 
+ Field entry at the discretion of the Merchant and returned unchanged by IPG. 
+ 
+<msgVerifier> 
+  
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+msgName + version + id + password + tranid + amt + trackid + udf1 + SECRET KEY + udf5 
+ 
+
+
+ 
+Financial Response message 
+The response that IPG returns to Merchant, after evaluating the financial request and processing the 
+transaction, contains the following fields: 
+<Response> 
+  
+  
+  
+ contains an attribute “type” whose value can be: “valid” or “error” 
+ 
+1st 
+levTag 
+ Response 
+Type 
+ Mand. 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+ M 
+ 30 
+ “FinancialResponse” 
+ 
+<version> 
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<msgDateTime> 
+  
+ M 
+ 24 
+ Message creation date/time, in UTC format 
+ 
+<recurid> 
+ “valid” 
+ C 
+ 20 
+ RecurID (if referenced original transaction is under a RecurID, the response reports the RecurID) 
+ 
+<paymentid> 
+ “valid” 
+ C 
+ 20 
+ PaymentID (if referenced original transaction has a PaymentID, the response reports the PaymentID) 
+ 
+<payinst> 
+ “valid” 
+ M 
+ 20 
+ Payment instrument used for the transaction (Credit Card, 3D Secure, MasterPass, MyBank) 
+ 
+<tranid> 
+ “valid” 
+ M 
+ 20 
+ Unique transaction identification code assigned by IPG 
+ 
+<action> 
+ “valid” 
+ M 
+ 2 
+ Type of action: 
+2 = Credit 
+3 = Purchase Reversal 
+5 = Capture 
+9 = Void Preauthorization 
+ 
+<result> 
+ “valid” 
+ M 
+ 20 
+ Transaction result: 
+"CAPTURED" = Successful Captured (if Action 5) 
+"CAPTURED" = Successful Credited (if Action = 2) 
+"NOT CAPTURED" = Not credited/Re-credited 
+“VOIDED” = Successful Written off (if Action =3), or Canceled (if Action=9) 
+"DENIED BY RISK" = Denied because exceeding the limits imposed by the bank 
+ 
+
+
+"HOST TIMEOUT" = Not processed due to no reply by the authorization system within specified period. 
+"ISSUER UNAVAILABLE" = Not processed due to failed connection with the authorization system 
+ 
+<auth> 
+ “valid” 
+ M 
+ 35 
+ Authorization code released by the credit card company, concerning the original transaction. 
+ 
+<currencycode> 
+ “valid” 
+ M 
+ 3 
+ Currency code. 
+ 
+<amt> 
+ “valid” 
+ M 
+ 10.2 
+ nnnnnnnnnn.nn. 
+ 
+<trackid> 
+ “valid” 
+ M 
+ 255 
+ Merchant TrackId.  
+ 
+<ref> 
+ “valid” 
+ M 
+ 20 
+ Authorization system reference number. 
+ 
+<responsecode> 
+ “valid” 
+ M 
+ 3 
+ Code granted by the Issuer that identifies, in case of failure, the reason for denying  
+ 
+<udf1> 
+ “valid” 
+ O 
+ 255 
+ user free field 1. If sent by the Merchant 
+ 
+<udf2> 
+ “valid” 
+ O 
+ 255 
+ user free field 2. If sent by the Merchant 
+ 
+<udf3> 
+ “valid” 
+ O 
+ 255 
+ user free field 3. If sent by the Merchant 
+ 
+<udf4> 
+ “valid” 
+ O 
+ 255 
+ user free field 4. If sent by the Merchant 
+ 
+<udf5> 
+ “valid” 
+ O 
+ 255 
+ user free field 5. If sent by the Merchant 
+ 
+<cardtype> 
+ “valid” 
+ M 
+ 10 
+ Brand Id (Visa, MasterCard, AMEX,...) 
+ 
+<expDate> 
+ “valid” 
+ M 
+ 6 
+ Card expiry date 
+ 
+<cardLastFourDigits> 
+ “valid” 
+ M 
+ 4 
+ Card last 4 digits 
+ 
+<errorCode> 
+ “error” 
+ M 
+ 20 
+ Error Code returned by IPG. 
+ 
+<errorService> 
+ “error” 
+ M 
+ 30 
+ Error Service returned by IPG. 
+ 
+<errorDesc> 
+ “error” 
+ M 
+ 256 
+ Error Description returned by IPG. 
+ 
+<msgVerifier> 
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+1)
+ If type=”valid”: msgName + version + msgDateTime + tranid + result + amt + trackid + udf1 + SECRET KEY + udf5 
+
+2)
+ If type=”error”: msgName + version + msgDateTime + errorCode + SECRET KEY + errorDesc 
+
+
+ 
+IMP.: Considerations reported at REQ11 of par. 4.1 apply 
+ 
+
+
+ 
+ 
+Payment Query Request message 
+Through a simple exchange of server-to-server messages, the Merchant can request information about payment order status. 
+ 
+The fields to be included in the request message are: 
+<Request> 
+ 
+1st 
+levTag 
+  
+  
+ Mand 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+  
+ M 
+ 30 
+ “PaymentQueryRequest” 
+ 
+<version> 
+  
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<id> 
+  
+  
+ M 
+ 8 
+ TranPortalID, assigned during activation of the 
+service 
+ 
+<password> 
+  
+  
+ M 
+ 16 
+ Password associated with TranPortalID 
+ 
+<action> 
+  
+  
+ M 
+ 2 
+ Type of action: 
+8 = Payment Query 
+ 
+
+
+<paymentid> 
+  
+  
+ M 
+ 20 
+ Unique identification code of the order, created by IPG and communicated to the Merchant in the PaymentInitResponse Message 
+ 
+<msgVerifier> 
+  
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+msgName + version + id + password + action + SECRET KEY + paymentid 
+ 
+
+
+ 
+Payment Query Response message 
+The response that IPG returns to Merchant, after processing the Payment Query request, contains the following fields: 
+<Response> 
+  
+  
+  
+ contains an attribute “type” whose value can be: “valid” or “error” 
+ 
+1st 
+levTag 
+ 2nd 
+levTag 
+ Mand. 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+ M 
+ 30 
+ “PaymentQuaryResponse” 
+ 
+<version> 
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<msgDateTime> 
+  
+ M 
+ 24 
+ Message creation date/time, in UTC format 
+ 
+<merchantid> 
+  
+ M 
+ 10 
+ Unique merchant identificator 
+ 
+<termid> 
+  
+ M 
+ 8 
+ TranPortalID, assigned during activation of the 
+service 
+ 
+<paymentid> 
+  
+ M 
+ 20 
+ Order ID 
+ 
+<trackid> 
+  
+ M 
+ 255 
+ Merchant TrackId.  
+ 
+<tranid> 
+  
+ M 
+ 20 
+ Unique transaction identification code assigned by IPG 
+ 
+<currencycode> 
+  
+ M 
+ 3 
+ Currency code. 
+ 
+<amt> 
+  
+ M 
+ 10.2 
+ nnnnnnnnnn.nn. 
+ 
+<status> 
+  
+ M 
+ 12 
+ Order status: 
+"INITIALIZED" = PaymentInit message received and validated by IPG. Payment page has not been displayed to the customer 
+"PRESENTED" = Payment page presented, but the customer has not completed the process.                          
+“PROCESSED” = The order has been completely processed by the IPG, and confirmation message received from the host. 
+“TIMEOUT” = The order has expired due to the host timing out the process. 
+ 
+<result> 
+  
+ M 
+ 20 
+ Transaction result: 
+"CAPTURED" = Successful Captured (if Action 5) 
+"CAPTURED" = Successful Credited (if Action = 2) 
+"NOT CAPTURED" = Not credited/Re-credited 
+“VOIDED” = Successful Written off (if Action =3), or Canceled (if Action=9) 
+"DENIED BY RISK" = Denied because exceeding the limits imposed by the bank 
+"HOST TIMEOUT" = Not processed due to no reply by the authorization system within specified period. 
+ 
+
+
+"ISSUER UNAVAILABLE" = Not processed due to failed connection with the authorization system 
+ 
+<payinst> 
+  
+ M 
+ 20 
+ Payment instrument used for the transaction (Credit Card, 3D Secure, Instant Payment, MasterPass, MyBank) 
+ 
+<payinittm> 
+  
+ M 
+ 11 
+ Order Initialization Date/Time 
+ 
+<payprsntm> 
+  
+ M 
+ 11 
+ Order Presentment Date/Time 
+ 
+<payprcstm> 
+  
+ M 
+ 11 
+ Order Processed Date/Time 
+ 
+<udf1> 
+  
+ O 
+ 255 
+ user free field 1. If sent by the Merchant 
+ 
+<udf2> 
+  
+ O 
+ 255 
+ user free field 2. If sent by the Merchant 
+ 
+<udf3> 
+  
+ O 
+ 255 
+ user free field 3. If sent by the Merchant 
+ 
+<udf4> 
+  
+ O 
+ 255 
+ user free field 4. If sent by the Merchant 
+ 
+<udf5> 
+  
+ O 
+ 255 
+ user free field 5. If sent by the Merchant 
+ 
+<eci> 
+  
+ O 
+ 2 
+ 3D-Secure Electronic commerce indicator 
+ 
+<cavv> 
+  
+ O 
+ 40 
+ 3D-Secure Cardholder authentication verification value 
+ 
+<xid> 
+  
+ O 
+ 40 
+ 3D-Secure XID value 
+ 
+<liability> 
+  
+ M 
+ 1 
+ Liability Shift indicator 
+ 
+<riskLevel> 
+  
+ C 
+ 20 
+ Risk Level (“GREEN”/”YELLOW”/”RED”) – Only if and terminal is Smash enabled. 
+ 
+<riskThreshold> 
+  
+ C 
+ 4 
+ Risk treshold (score that defines the borderline between GREEN and YELLOW zones) – Only if terminal is Smash enabled 
+ 
+<riskScore> 
+  
+ C 
+ 4 
+ Risk score – Only if terminal is Smash enabled. 
+ 
+<riskMaxScore> 
+  
+ C 
+ 4 
+ Max Risk Score for the risk policy that assessed the transaction (sum of “scoreConfigured” values returned by SMASH) – Only if terminal is Smash enabled. 
+ 
+<rows> 
+  
+ C 
+ 2 
+ Number of transaction data rows 
+ 
+<row> 
+  
+  
+  
+ [1..n] <row> tags with order’s transaction data 
+ 
+ 
+ <action> 
+  
+ 2 
+ Action code 
+ 
+ 
+ <tranid> 
+  
+ 20 
+ Transaction ID 
+ 
+ 
+ <msgDateTime> 
+  
+ 24 
+ Message creation date/time, in UTC format 
+ 
+ 
+ <amt> 
+  
+ 10.2 
+ Transaction’s amount 
+ 
+ 
+ <result> 
+  
+ 20 
+ Transaction result 
+ 
+ 
+ <auth> 
+  
+ 20 
+ Authorization Code 
+ 
+ 
+ <cardtype> 
+  
+ 10 
+ Brand Id (Visa, MasterCard, AMEX,...) 
+ 
+ 
+  <responsecode> 
+  
+ 3 
+ Host Response Code. 
+ 
+ 
+ <ref> 
+  
+ 20 
+ Authorization system reference number.  
+ 
+ 
+ <udf1> 
+  
+ 255 
+ user free field 1. If sent by the Merchant 
+ 
+ 
+ <udf2> 
+  
+ 255 
+ user free field 2. If sent by the Merchant 
+ 
+ 
+ <udf3> 
+  
+ 255 
+ user free field 3. If sent by the Merchant 
+ 
+ 
+ <udf4> 
+  
+ 255 
+ user free field 4. If sent by the Merchant 
+ 
+ 
+ <udf5> 
+  
+ 255 
+ user free field 5. If sent by the Merchant 
+ 
+<msgVerifier> 
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+msgName + version + msgDateTime + paymentid + amt + trackid + udf1 + SECRET KEY +  udf5 
+ 
+
+
+ 
+  MOTO transactions 
+Introduction 
+IPG provides a service for managing payment transactions with credit cards obtained as a result of sales made by mail or through call centers. This chapter describes necessary merchant activities to integrate with IPG in case of MOTO payment transaction processing. 
+The Buyer perspective 
+To make a purchase, the Buyer: 
+•
+ Chooses products 
+
+•
+ Creates an order, including card details and sends it to the merchant by email or through the call center. 
+
+•
+ Receives an e-mail message notification of payment, if the setting is enabled by the Merchant, to be used as a virtual receipt 
+
+
+The Merchant perspective 
+The Merchant receives a purchase order from the Buyer and: 
+•
+ Sends a payment request message (TransactionRequest) to the IPG 
+
+•
+ Receives a response message (TransactionResponse) with transaction result from IPG 
+
+•
+ Presents the result to the Buyer 
+
+•
+ Receives an e-mail message notification of payment, if the setting is enabled by the Merchant, to be used as a virtual receipt 
+
+
+The IPG perspective 
+IPG receives a payment request (TransactionRequest) from the Merchant and: 
+•
+ Processes the transaction by sending the request to the credit card company authorisation systems and gets a response 
+
+•
+ Sends to the merchant a response message (TransactionResponse) with the transaction result 
+
+•
+ Sends an e-mail message notification of payment to the Buyer and / or the Merchant (if the setting is enabled by the Merchant) to be used as virtual receipt. 
+
+
+Merchant Integration 
+Introduction 
+IPG includes the presence of some direct communications with the Merchant server to complete 
+the transactions. This exchange of messages can be implemented in two ways: 
+•
+ through the installation of a special plug-in 
+
+•
+ by creating their own communication interface 
+
+
+ 
+The plug-in is easy to integrate and is compatible with all sites developed in Java, C/C++, ColdFusion, ActiveX/COM, VB, ASP, .NET. 
+ 
+If it is not possible or desirable to use the plug-in (e.g. because it is not compatible with the 
+technological platform, or the site is published via an external provider in shared hosting) it is 
+always possible, according to the specifications provided, to create your own communication 
+interface. 
+ 
+ 
+Messages between the merchant site and IPG 
+Message Verifier 
+All messages exchanged between Merchant Site and IPG are signed using Message Verifier (msgVerifier) which is dynamically composed of specific message data (see bellow message specifications). 
+Steps for Message Verifier generation are: 
+a) Concatenate specified message data to create Message Verifier string; 
+b) Remove spaces; 
+c) Hash the string created in previous step using SHA256 algorithm. 
+Example of Message Verifier creation for PaymentInit request message - 
+Message data 
+ Value 
+ 
+msgName 
+ PaymentInitRequest 
+ 
+version 
+ 1 
+ 
+id 
+ 89110001 
+ 
+password 
+ test1234 
+ 
+amt 
+ 15.00 
+ 
+trackid 
+ CTV-TEST-PureBuy-1 
+ 
+udf1 
+ AA 
+ 
+SECRET KEY 
+ YXKZPOQ9RRLGPDED5D3PC5BJ 
+ 
+udf5 
+ EE 
+ 
+
+
+ 
+a) Concatenate msgName, version, id, password, amt, trackid, udf1, SECRET KEY and udf5: 
+PaymentInitRequest 1 89110001 test1234 15.00 CTV-TEST-PureBuy-1 AA YXKZPOQ9RRLGPDED5D3PC5BJ EE 
+ 
+ 
+PaymentInitRequest189110001test123415.00CTV-TEST-PureBuy-1AAYXKZPOQ9RRLGPDED5D3PC5BJEE 
+ 
+c) Hash of step (b) value using SHA256 algorithm 
+ 
+b3a54617d2e9acd9079d85ea15d066a5892e3cabe1b41da4891b3a65ffaa0cce 
+ 
+Payment Request 
+This message (TransactionRequest) is sent by the Merchant to IPG to start a transaction. It uses the following items:> 
+<Request> 
+ 
+1st 
+levTag 
+ 2nd 
+levTag 
+ 3rd 
+lev Tag 
+ Mand. 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+  
+ M 
+ 30 
+ “TransactionRequest” 
+ 
+<version> 
+  
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<id> 
+  
+  
+ M 
+ 8 
+ tranPortalID 
+ 
+<password> 
+  
+  
+ M 
+ 16 
+ tranPortal pwd 
+ 
+<payinst> 
+  
+  
+ O 
+ 20 
+ fixed: "CC" 
+ 
+<action> 
+  
+  
+ M 
+ 2 
+ action code: 1 or 4 
+ 
+<currencycode> 
+  
+  
+ M 
+ 3 
+ currency code 
+ 
+<amt> 
+  
+  
+ M 
+ 10.2 
+ nnnnnnnnnn.nn 
+ 
+<trackid> 
+  
+  
+ M 
+ 255 
+ Merchant TrackId 
+ 
+<member> 
+  
+  
+ C 
+ 384 
+ cardholder name - Mandatory if recurAction = “” or recurAction = “activation” 
+ 
+<addr> 
+  
+  
+ O 
+ 255 
+ cardholder address 
+ 
+<zip> 
+  
+  
+ O 
+ 20 
+ cardholder postal code 
+ 
+<card> 
+  
+  
+ C 
+ 19 
+ card number – Mandatory if recurAction = “” or recurAction = “activation” 
+ 
+<cvv2> 
+  
+  
+ O 
+ 4 
+ card security code. Could be mandatory for some merchants 
+ 
+<expYear> 
+  
+  
+ C 
+ 4 
+ card expiration year - Mandatory if recurAction = “” or recurAction = “activation” 
+ 
+<expMonth> 
+  
+  
+ C 
+ 2 
+ card expiration month - Mandatory if recurAction = “” or recurAction = “activation” 
+ 
+<eci> 
+  
+  
+ O 
+ 2 
+ 3DS ECI value. Only used by ECSEC merchants 
+ 
+<xid> 
+  
+  
+ O 
+ 40 
+ 3DS XID value. Only used by ECSEC merchants 
+ 
+<cavv> 
+  
+  
+ O 
+ 40 
+ 3DS CAVV value. Only used by ECSEC merchants 
+ 
+<clientIPAddress> 
+  
+  
+ O 
+ 25 
+ buyer browser IP Address. Only used by ECSEC merchants 
+ 
+<clientUserAgent> 
+  
+  
+ O 
+ 512 
+ buyer browser user agent string. Only used by ECSEC merchants 
+ 
+<clientHTTPHeaders> 
+  
+  
+ O 
+ 2048 
+ buyer browser http headers values. Only used by ECSEC merchants 
+ 
+<langid> 
+  
+  
+ O 
+ 3 
+ language used by the buyer on merch. Website. Only used by ECSEC merchants 
+ 
+<buyerUserId> 
+  
+  
+ O 
+ 50 
+ UserId with which the buyer is registered at the merchant web site. Only used by ECSEC merchants 
+ 
+<recurAction> 
+  
+  
+ M 
+ 10 
+ Possible Values (case insensitive): 
+“activation” – the Merchant requires a new Recurring Payment to be activated 
+“merchant_initiated” – a following transaction on an active recurring payment is requested 
+“delete” – a recurring payment cancellation is requested 
+“” – indicates a normal s2s transaction 
+ 
+
+
+<recurContractID> 
+  
+  
+ O 
+ 30 
+ Optional information to collect the Recurring Payment Contract Identifier (only if recurAction=”activation”, otherwise ignored). 
+ 
+<pymnDscr> 
+  
+  
+ O 
+ 255 
+ Recurring Payment description 
+ 
+<recurid> 
+  
+  
+ C 
+ 20 
+ RecurID: Mandatory if recurAction= “merchant_initiated” or ”delete”, otherwise ignored 
+ 
+<recurNewCardExpDate> 
+  
+  
+ O 
+ 6 
+ Rec.Pymn. new card expiration date (format YYYYMM) – Considered if recurAction=“merchant_initiated”, otherwise ignored 
+ 
+<bankStmtFreeText> 
+  
+  
+ O 
+ 50 
+ Free Text that will be forwarded to Auth System in p127, in order to be printed on bank account statement (replaces “B24POSFTEXT” special value in UDF1) 
+ 
+<udf1> 
+  
+  
+ O 
+ 255 
+ user free field 1 
+ 
+<udf2> 
+  
+  
+ O 
+ 255 
+ user free field 2 
+ 
+<udf3> 
+  
+  
+ O 
+ 255 
+ user free field 3 
+ 
+<udf4> 
+  
+  
+ O 
+ 255 
+ user free field 4 
+ 
+<udf5> 
+  
+  
+ O 
+ 255 
+ user free field 5 
+ 
+<buyerFirstName> 
+  
+  
+ O 
+ 50 
+ Buyer first name 
+ 
+<buyerLastName> 
+  
+  
+ O 
+ 50 
+ Buyer last name 
+ 
+<buyerPhoneNumber> 
+  
+  
+ O 
+ 20 
+ Buyer phone number 
+ 
+<buyerEmailAddress> 
+  
+  
+ O 
+ 255 
+ Buyer email address 
+ 
+<cartContent> 
+  
+  
+ O 
+  
+ Order content. 
+ 
+ 
+ <item> 
+  
+ C 
+  
+ [1..n] <item> tags if <cartContent> is present 
+ 
+ 
+  
+ <productId> 
+ M 
+ 30 
+ product identifier 
+ 
+ 
+  
+ <productDesc> 
+ O 
+ 255 
+ product description 
+ 
+ 
+  
+ <qty> 
+ M 
+ 8 
+ product quantity in the cart 
+ 
+ 
+  
+ <singlePrice> 
+ M 
+ 10.2 
+ product single price  
+ 
+<shippingInfo> 
+  
+  
+ O 
+  
+ Shipping details 
+ 
+ 
+ <recipientFirstName> 
+  
+ C 
+ 50 
+ Recipient First Name. Mandatory if <shippingInfo> is present. 
+ 
+ 
+ <recipientLastName> 
+  
+ C 
+ 50 
+ Recipient Last Name. Mandatory if <shippingInfo> is present. 
+ 
+ 
+ <recipientPhoneNumber> 
+  
+ O 
+ 20 
+ Recipient Phone Number. 
+ 
+ 
+ <ShippingAddress> 
+  
+ C 
+  
+ Shipping Address. Mandatory if <shippingInfo> is present 
+ 
+ 
+  
+ <country> 
+ C 
+ 3 
+ Shipping Country. Mandatory if <buyerShippingAddress> is present. ISO 3166-1 (Alpha 3) format required. 
+ 
+ 
+  
+ <city> 
+ C 
+ 40 
+ Shipping City. Mandatory if <buyerShippingAddress> is present 
+ 
+ 
+  
+ <zip> 
+ C 
+ 20 
+ Shipping Postal Code. Mandatory if <buyerShippingAddress> is present 
+ 
+ 
+  
+ <addrLine1> 
+ C 
+ 100 
+ Shipping Address Line 1 (Street name, number). Mandatory if <buyerShippingAddress> is present 
+ 
+ 
+  
+ <addrLine2> 
+ O 
+ 100 
+ Shipping Address Line 2 (apt number, suite, etc) 
+ 
+ 
+  
+ <addrLine3> 
+ O 
+ 40 
+ Shipping Address Line 3 (all info not containable in first 2 lines) 
+ 
+<billingInfo> 
+  
+  
+ O 
+  
+ Billing details 
+ 
+
+
+ 
+ <billingFirstName> 
+  
+ C 
+ 50 
+ First name of the billed person. Mandatory if <billingInfo> is present 
+ 
+ 
+ <billingLastName> 
+  
+ C 
+ 50 
+ Last name of the billed person. Mandatory if <billingInfo> is present 
+ 
+ 
+ <billingAddress> 
+  
+ C 
+  
+ Billing Address. Mandatory if <billingInfo> is present  
+ 
+ 
+  
+ <country> 
+ C 
+ 3 
+ Billing Country. Mandatory if <billingAddress> is present. ISO 3166-1 (Alpha 3) format required. 
+ 
+ 
+  
+ <city> 
+ C 
+ 40 
+ Billing City. Mandatory if <billingAddress> is present 
+ 
+ 
+  
+ <zip> 
+ C 
+ 20 
+ Billing Postal Code. Mandatory if <billingAddress> is present 
+ 
+ 
+  
+ <addrLine1> 
+ C 
+ 100 
+ Billing Address Line 1 (Street name, number). Mandatory if <billingAddress> is present 
+ 
+ 
+  
+ <addrLine2> 
+ O 
+ 100 
+ Billing Address Line 2 (Street name, number) 
+ 
+ 
+  
+ <addrLine3> 
+ O 
+ 40 
+ Billing Address Line 3 (all info not containable in first 2 lines) 
+ 
+<msgVerifier> 
+  
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+msgName + version + id + password + recurid + amt + trackid + udf1 + SECRET KEY + udf5 
+ 
+
+
+ 
+Payment response 
+After payment processing, IPG sends this message (TransactionResponse) to inform the Merchant of the transaction result (if it has been processed) or the error reason (if it has not been processed). Payment response message has the following structure: 
+<Response> 
+  
+  
+  
+ contains an attribute “type” whose value can be: “valid” or “error” 
+ 
+1st 
+levTag 
+ Response 
+Type 
+ Mand. 
+ Max 
+Size 
+ Description 
+ 
+<msgName> 
+  
+ M 
+ 30 
+ “TransactionResponse” 
+ 
+<version> 
+  
+ M 
+ 8 
+ “1” (integer) 
+ 
+<msgDateTime> 
+  
+ M 
+ 24 
+ Message creation date/time, in UTC format 
+ 
+<tranID> 
+ valid 
+ M 
+ 20 
+ TransactionID. 
+ 
+<action> 
+ valid 
+ M 
+ 2 
+ action code. 
+ 
+<payinst> 
+ valid 
+ M 
+ 20 
+ payment instrument used for the transaction. 
+ 
+<result> 
+ valid 
+ M 
+ 20 
+ Transaction result. 
+ 
+<auth> 
+ valid 
+ M 
+ 35 
+ Auth code. 
+ 
+<currencycode> 
+ valid 
+ M 
+ 3 
+ Currency code. 
+ 
+<amt> 
+ valid 
+ M 
+ 10.2 
+ nnnnnnnnnn.nn. 
+ 
+<trackid> 
+ valid 
+ M 
+ 255 
+ Merchant TrackId. 
+ 
+<ref> 
+ valid 
+ M 
+ 20 
+ Auth system ref number. Mandatory if payinst = “CC”/”VPAS” /"IP"/”MPASS” 
+ 
+<responsecode> 
+ valid 
+ M 
+ 3 
+ Host Response Code. Mandatory if payinst = “CC”/”VPAS” /"IP"/”MPASS” 
+ 
+<cardtype> 
+ valid 
+ M 
+ 10 
+ brand Id.  
+ 
+<recurid> 
+ valid 
+ C 
+ 20 
+ Recurring Payment identifier. Only if Merchant specified in the request: 
+ 
+
+
+- <recurAction>=”activation” (in this case, it’s the RecurID of a newly generated recurring payment) 
+- <recurAction>=”merchant_initiated”, “delete” (in this case, it’s the RecurID provided by the Merchant in the rec. payment instance request).  
+ 
+<expDate> 
+ valid 
+ M 
+ 6 
+ Card expiry date 
+ 
+<cardLastFourDigits> 
+ valid 
+ M 
+ 4 
+ Card last 4 digits 
+ 
+<recurContractID> 
+ valid 
+ C 
+ 30 
+ Recurring Payments Contract Identifier indicated by the Merchant in the request. 
+ 
+<recurNewCardExpDate> 
+ valid 
+ C 
+ 6 
+ If a new card expiration date is successfully used for a recurring payment instance, the new exp date is reported to the merchant. 
+ 
+<cardCountry> 
+ valid 
+ M 
+ 2 
+ card country.  
+ 
+<udf1> 
+ valid 
+ O 
+ 255 
+ user free field 1 - Only if Merchant sent it in the request 
+ 
+<udf2> 
+ valid 
+ O 
+ 255 
+ user free field 2 - Only if Merchant sent it in the request 
+ 
+<udf3> 
+ valid 
+ O 
+ 255 
+ user free field 3 - Only if Merchant sent it in the request 
+ 
+<udf4> 
+ valid 
+ O 
+ 255 
+ user free field 4 - Only if Merchant sent it in the request 
+ 
+<udf5> 
+ valid 
+ O 
+ 255 
+ user free field 5 - Only if Merchant sent it in the request 
+ 
+<riskLevel> 
+ valid 
+ C 
+ 20 
+ Risk Level (“GREEN”/”YELLOW”/”RED”) – Only if terminal is Smash enabled. 
+ 
+<riskThreshold> 
+ valid 
+ C 
+ 4 
+ Risk threshold (score that defines the borderline between GREEN and YELLOW zones) – Only if terminal is Smash enabled 
+ 
+<riskScore> 
+ valid 
+ C 
+ 4 
+ Risk score – Only if terminal is Smash enabled. 
+ 
+<riskMaxScore> 
+ valid 
+ C 
+ 4 
+ Max Risk Score for the risk policy that assessed the transaction (sum of “scoreConfigured” values returned by SMASH) – Only if terminal is Smash enabled. 
+ 
+<errorCode> 
+ error 
+ M 
+ 20 
+ Error Code returned by IPG. 
+ 
+<errorService> 
+ error 
+ M 
+ 30 
+ Error Service returned by IPG. 
+ 
+<errorDesc> 
+ error 
+ M 
+ 256 
+ Error Description returned by IPG. 
+ 
+<msgVerifier> 
+  
+ M 
+ 50 
+ Salted hash of some fields of this message plus a secret shared key – Hash algorithm: SHA-2 (256).  
+String to hash in this exact order (only fields values, not tags): 
+1)
+ If type=”valid”: msgName + version + msgDateTime + tranid + amt + trackid + udf1 + SECRET KEY + udf5 
+
+2)
+ If type=”error”: msgName + version + msgDateTime + errorCode + SECRET KEY + errorDesc 
+
+
+ 
+IMP.: Considerations reported at REQ11 of par. 4.1 apply 
+ 
+
+
+ 
+ 
+ 
+ 
+  
+  Plug-in interface specifications 
+Plug-in is a application module/library which provides integration implementation directly to the merchant. In this way, the developer skips low level integration and works directly with the provided IPG API.  
+There are two plug-in APIs provided:  
+•
+ Java API for integration with java based merchant applications 
+
+•
+ DLL API for integration with Windows based merchant application 
+
+
+Java plugin 
+Java Plug-in implementation is provided through the ipg-java-plugin-src-1.x.x.jar file. This file is part of every distribution of IPGDemoPlugin simulator in a following file: IPGDemoPluginServer.zip -> IPGDemoPlugin.war -> WEB-INF/lib/ipg-java-plugin-src-1.0.3.jar.  
+
+• Java Plug-in API is provided with the following interface: rs.asoft.ipg.plugin.service. IPGPaymentService. 1.
+ Presents all internet payment methods provided by IPG server. In order to choose optimal integration approach, it is essential to understand all the integration options. 
+
+2.
+ Provides ipgdemo.log file with detailed logging description of each action when simulating internet payments. Merchant developers should use it to understand what parameters and data are necessary to be provided for a successful communication with the IPG server. 
+
+3.
+ IPGDemoPluginServer.zip -> IPGDemoPlugin.war file demonstrates an example of the deployment package necessary to integrate with the IPG server.   
+
+4.
+ IPGDemoPluginServer.zip -> IPGDemoPlugin.war -> IPGDemoPlugin-src-1.*.jar contains all Java classes necessary for the Merchant to develop in order to fully integrate with the IPG server. 
+
+5.
+ IPGDemoPluginServer.zip -> IPGDemoPlugin.war -> ipg-java-plugin-src-1.*.*.jar contains Java plugin to be used out of box in order to speed up and simplify the integration 
+
+6.
+ If IPG Demo Plugin application is installed on the merchant host server, merchant developer will be able to compare the processing  between merchant and simulator implementation 
+
+
+
+
+
+Java IPG Demo Plugin Simulator 
+IPG Demo Plugin Simulator is the essential tool provided in order to simplify integration with the merchant site. The Java version of IPG Demo Plugin Simulator is provided via IPGDemoPluginServer.zip which is able to download via https://<ipgtesthost> /IPGDemoPlugin/demoPlugin.html?msgName=HelpRequest help page.  
+IPGDemoPluginServier.zip contains simple Jetty server and IPG Demo Plugin client application. To run the IPG Demo Plugin simulator, it is enough to unzip the archive and double click IPGDemoPlugin.bat (if having issues please follow the Java installation steps on the help page).  
+ 
+Use of IPG Demo Simulator has following benefits: 
+.    
+ 
+IPG Payment Service Factory 
+Best way to create an instance of IPGPaymentService is via rs.asoft.ipg.plugin.service. IPGPaymentServiceFactory class by invoking IPGPaymentService getIPGPaymentService(int ipgClientType) method. Currently following IPG client types are supported: 
+•
+ int IPGPaymentServiceFactory.IPG_CLIENT_TYPE_GENERIC_XML = 1 – Default implementation for using custom XML protocol. 
+
+•
+ int IPGPaymentServiceFactory.IPG_CLIENT_TYPE_REST_XML = 2 – REST XML implementation 
+
+•
+ int IPGPaymentServiceFactory.IPG_CLIENT_TYPE_REST_JSON = 3 – REST Json implementation 
+
+
+ 
+Example: In order to create IPG Generic XML instance following code is to be used: 
+int ipgClientType = IPG_CLIENT_TYPE_GENERIC_XML; 
+IPGPaymentService ipgPaymentService = IPGPaymentServiceFactory.getIPGPaymentService(ipgClientType); 
+IPG Logger Interface 
+The default logging implementation is rs.asoft.ipg.plugin.service.IPGLoggerLog4jImpl class as a logging wrapper around Log4j implementation.  
+In order to substitute logging implementation create a new implementation by extending rs.asoft.ipg.plugin.service.IPGLogger and use logger following method of IPGPaymentServiceFactory class: 
+IPGPaymentService ipgPaymentService = IPGPaymentServiceFactory.getIPGPaymentService(ipgClientType, ipgLogger); 
+ 
+ 
+IPG Payment Service Interface 
+The Java plugin API - IPGPaymentService functions provides main IPG business functions.  The functions are divided in the following groups: 
+ 
+•
+  Setup methods – to substitute following IPG Payment Service client modules: 
+
+a)
+ void setHttpSender(HttpSender httpSender) – communication with IPG server 
+
+b)
+ void setIPGXmlParser(IPGXmlParser ipgXmlParser) – parsing of XML request and response messages (applicable only in case of IPG_CLIENT_TYPE_GENERIC_XML) 
+
+
+ 
+•
+ 3DSecure methods – provides methods to invoke when integrating with standard 3DSecure payment transactions (Cardholder data collected on the IPG server): 
+
+a)
+ PaymentInitResponse sendPaymentInitRequest(PaymentInitRequest) – to start 3DSecure payment transaction with IPG server 
+
+b)
+ byte[] procesNotificationXmlRequest(String secretKey, byte[] xmlBytes, NotificationUrlBulder notificationUrlBulder) – utility function to parse XML Notification Request submitted by IPG server and create Notification Response XML bytes. 
+
+c)
+ byte[] procesNotificationFormRequest(String secretKey, Map requestParameters, NotificationUrlBulder notificationUrlBulder) – utility function to parse HTTP  Notification Request submitted by IPG server and create Notification Response URL bytes 
+
+d)
+ byte[] procesNotificationJsonRequest(String secretKey, byte[] jsonBytes, NotificationUrlBulder notificationUrlBulder) – utility function to parse JSON  Notification Request submitted by IPG server and create Notification Response JSON bytes 
+
+
+ 
+•
+ VI3DSecure methods – provides methods to invoke when integrating with standard 3DSecure payment transactions(Cardholder data collected on the Merchant PCI Compliant server): : 
+
+a)
+ TransactionVI3DSResponse sendTransactionVI3DSVerifyEnrollment(TransactionVI3DSVEReqRequest) – to start 3DSecure payment transaction with IPG server 
+
+b)
+ TransactionVI3DSResponse sendTransactionVI3DSPARes(TransactionVI3DSPAResRequest) – to finish 3DSecure payment transaction with IPG server 
+
+
+ 
+•
+ MOTO (Mail Order / Telephone Order) method – provides method to submit MOTO transaction (Cardholder data collected on the Merchant PCI Compliant server): 
+
+a)
+ TransactionResponse sendTransactionRequest(TransactionRequest) ) – to process MOTO transaction on IPG server 
+
+
+ 
+•
+ Financial method – provides method to submit Financial transaction (CREDIT, VOID_PURCHASE, CAPTURE, VOID_CREDIT, VOID_CAPTURE, VOID_AUTHORIZATION, GAMING_PAYMENT): 
+
+a)
+ FinancialResponse sendFinancialRequest(FinancialRequest financialRequest) ) – to process Financial transaction on IPG server 
+
+
+ 
+•
+ Batch method – provides method to submit MOTO transactions via a batch file (Cardholder data collected on the Merchant PCI Compliant server): 
+
+b)
+ BatchResponse sendBatchFileRequest(BatchFileRequest) to process MOTO transactions on IPG server, provided in the Batch file 
+
+
+ 
+DLL plugin 
+Windows DLL Plug-in implementation is provided through the IPGPaymentService.dll and IPGPaymentService.tlb files. These files are part of the IPGDemoPlugin simulator – Windows IIS version.  
+If you wish to receive the files, please submit the request to the IPG support contact.   
+ 
+  Direct interface specifications 
+If you don‘t have a suitable platform to use plug-in or want to create your own interface, all information on the communication protocol, the transmission and reception of the message formats, their variables and error messages are listed below. 
+ 
+Communication protocol specifications 
+•
+ Target (action): 
+
+
+- in a test environment 
+<TestEnvironment_IP_address>/IPGWeb/servlet/IPGPaymentXMLServlet 
+ 
+Note: Test environment IP address will be communicated to you via e-mail. 
+ 
+- in a production environment 
+<Production_IP_address>/IPGWeb/servlet/PaymentInitHTTPServlet 
+•
+ Method: POST 
+
+•
+ Content-Type: “application/xml” 
+
+
+Data transmission format 
+Examples of messages sent by Merchant to IPG: 
+ 
+PaymentInit Message 
+<request> 
+  <msgName>PaymentInitRequest</msgName> 
+  <version>1</version> 
+  <id>89110001</id> 
+  <password>test1234</password> 
+  <langId>USA</langId> 
+  <buyerFirstName /> 
+  <buyerLastName /> 
+  <buyerUserId /> 
+  <buyerPhoneNumber /> 
+  <buyerEmailAddress /> 
+  <clientIpAddress /> 
+  <clientUserAgent /> 
+  <clientHttpHeaders /> 
+  <action>1</action> 
+  <recurAction /> 
+  <recurContractId>RECURCNTRID-12345</recurContractId> 
+  <amt>12.35</amt> 
+  <payinst /> 
+  <currencycode>978</currencycode> 
+  <trackid>CTV-TEST-PureBuy-1</trackid> 
+  <responseURL>http://192.168.100.104:8080/IPGDemoPlugin/paymentNotification.html</responseURL> 
+  <errorURL>http://192.168.100.104:8080/IPGDemoPlugin/paymentError.html</errorURL> 
+  <cardSHA2>Y</cardSHA2> 
+  <paymentTimeout>30</paymentTimeout> 
+  <bankStmtFreeText /> 
+  <pymnDscr /> 
+  <instructedFees /> 
+  <notificationFormat>xml</notificationFormat> 
+  <paymentPageMode>0</paymentPageMode> 
+  <udf1>AA</udf1> 
+  <udf2>BB</udf2> 
+  <udf3>CC</udf3> 
+  <udf4>DD</udf4> 
+  <udf5>EE</udf5> 
+<msgVerifier>i/CFOYVGoVdNrAg+AdqnMav4QDv6WhXBJlirRTiU5yY=</msgVerifier> 
+</request> 
+ 
+Payment Message 
+<request> 
+  <msgName>FinancialRequest</msgName> 
+  <version>1</version> 
+  <id>89110001</id> 
+  <password>test1234</password> 
+  <action>2</action> 
+  <amt>1.00</amt> 
+  <currencycode>978</currencycode> 
+  <trackid>A1B2C3</trackid> 
+  <tranid>666311898221172199</tranid> 
+  <udf1>AA</udf1> 
+  <udf2>BB</udf2> 
+  <udf3>CC</udf3> 
+  <udf4>DD</udf4> 
+  <udf5>EE</udf5> 
+  <msgVerifier>FJcbvZ5VE0grZgaOHsh6N+apgEl2yS+v5gksMhMMYCI=</msgVerifier> 
+</request> 
+Data reception format 
+Examples of messages sent by IPG to Merchant: 
+ 
+PaymentInit Response: 
+<response type="valid"> 
+<msgName>PaymentInitResponse</msgName> 
+<version>1</version> 
+<msgDateTime>2017-08-07 10:49:01.788</msgDateTime> 
+<paymentid>490861957491072190</paymentid> 
+<browserRedirectionURL>http://ipg-test:9080/IPGWeb/servlet/PaymentSelection.html</browserRedirectionURL> 
+<msgVerifier>K5s0L0+Fpm2C6bvt4Own9ExH0cC82083I23B+mxcEMA=</msgVerifier> 
+</response> 
+ 
+Payment Response: 
+<response type="valid"> 
+<msgName>FinancialResponse</msgName> 
+<version>1</version> 
+<msgDateTime>2017-08-07 11:23:15.260</msgDateTime> 
+<paymentid>375113018221172196</paymentid> 
+<action>2</action> 
+<currencycode>978</currencycode> 
+<amt>5.00</amt> 
+<payinst>CC</payinst> 
+<cardtype>VISA</cardtype> 
+<expdate>203603</expdate> 
+<cardlastfourdigits>0004</cardlastfourdigits> 
+<result>CAPTURED</result> 
+<auth>720479</auth> 
+<ref>721911012683</ref> 
+<responsecode>00</responsecode> 
+<tranid>596343336231172190</tranid> 
+<trackid>A1B2C3</trackid> 
+<udf1>AA</udf1> 
+<udf2>BB</udf2> 
+<udf3>CC</udf3> 
+<udf4>DD</udf4> 
+<udf5>EE</udf5> 
+<msgVerifier>MZTL7EJNe3Xsk0qgNPkJJpZaU89K1XotD23AyIsZGUY=</msgVerifier> 
+</response> 
+ 
+ 
+  IPG Demo Plugin 
+For better understanding of merchant integration, the IPG Demo Plugin is available. It simulates messages exchanging between merchant server and payment gateway server. Additional technical information are provided through online log which is presented during the plugin is running. Detailed instruction for how to use IPG Demo Plugin are provided in AsoftIPG Transactions User Guide.  
+To activate IPG Demo Plugin: 
+1.
+ access to IPG simulator’s URL address (the address will be provided by Bank’s contact person); 
+
+2.
+ Open Help menu; 
+
+3.
+ Download IPG Demo Plugin; 
+
+4.
+ Unzip the IPGDemoPluginServer.zip file; 
+
+5.
+ Update the value of the parameter "webapp.address" in ipgDemoPluginCfg.properties file (replace <merchantsiteurl> with your public IP address); 
+
+6.
+ Run IPGDemoPlugin.bat file. 
+
+
+ 
+The IPG Demo log provides a detailed insight into the correct processing of the client application and demonstration of an optimal integration method.  
+ 
+For better understanding the procedure of generating Message Verifier (MsgVerifier) fields, do the following: 
+1. Perform payment transaction using IPG Demo application with predefined parameters; 
+2. Search for “Message Verifier Base loaded, messageVerifierBase:..” row in IPG Demo log file to see how looks like MsgVerifier string for the transaction preformed in previous step; 
+3. Inspect method IPGDemoPluginServer.zip -> IPGDemoPlugin.war -> WEB-INF/lib/ipg-java-plugin-src-1.0.3.jar -> rs.asoft.ipg.plugin.service.IPGPaymentServiceSupport.generateMessageVerifier  to consider the way of Message Verifier generating using SHA256 algorithm; 
+4. Inspect method IPGDemoPluginServer.zip -> IPGDemoPlugin.war -> WEB-INF/lib/ipg-java-plugin-src-1.0.3.jar -> rs.asoft.ipg.plugin.model.PaymentInitRequest -> PaymentInitRequest.getMessageVerifierBase()  to consider the way of Message Verifier for PaymentInit message generating. 
+  Test environment 
+IPG provides a test environment where the Merchant can freely perform transactions to properly 
+prepare the interface for the transition into production. 
+ 
+The test environment is always available, even if 24-hour availability cannot be guaranteed, as a 
+result of corrective and evolutionary maintenance interventions that could make it temporarily 
+unusable, without notice. 
+ 
+Variables to be set for the creation of PaymentInit message 
+If you use the plug-in, use the following URL for an IPG test connection: 
+•
+ <TestEnvironment_IP_address>/IPGDemoPlugin/demoPlugin.html 
+
+
+ 
+If you are using direct interfacing, the full address to create the connection is as follows: 
+•
+ <TestEnvironment_IP_address>/IPGWeb/servlet/IPGPaymentXMLServlet 
+
+
+ 
+The variables to be set in a fixed manner are the following: 
+•
+ Response URL: <TestEnvironment_IP_address>/IPGDemoPlugin/paymentNotification.html 
+
+•
+ Error URL: <TestEnvironment_IP_address>/IPGDemoPlugin/paymentError.html 
+
+
+ 
+Note: Test environment IP address and Secret Key will be communicated to you via e-mail. 
+ 
+Other parameters can be defined freely. 
+ 
+Mandatory test cases 
+It is mandatory to perform the following tests, which are the most frequent real case 
+studies, before sending the confirmation of the end of the test to Customer support and then 
+requesting the transition into production. 
+ 
+Test case n°1 – Successful e-commerce transaction 
+ 
+Create and submit PaymentInit message. 
+ 
+Once the HPP is displayed, use the following card: 
+Terminal ID 
+ Terminal password 
+ Card Number 
+ Expiry 
+ CVV2 
+ 
+89110001 
+ test1234 
+ 4012001037141112 
+ Any future date 
+ Any 3-digits number 
+ 
+
+
+ 
+Check that: 
+•
+ the PaymentNotificationRequest message has been received correctly with all the required fields (paymentid, tranid, trackid, msgDateTime, result, currencycode, amt, auth, udf1, udf2, udf3, udf4, udf5, cardtype, payinst, liability, responsecode). 
+
+•
+ the transaction is successful (result = "APPROVED" if you used Action = 4, or 
+
+
+"CAPTURED" if you used Action = 1) 
+•
+ The browser has been re-directed properly to the address provided in the PaymentNotificationResponse message. 
+
+
+ 
+ 
+ 
+Test case n°2 – Transaction not authorized 
+ 
+Create and submit PaymentInit message. 
+ 
+Once the HPP is displayed, use the following card: 
+ 
+Terminal ID 
+ Terminal password 
+ Card Number 
+ Expiry 
+ CVV2 
+ 
+89110001 
+ test1234 
+ 4539990000000020 
+ Any future date 
+ Any 3-digits number 
+ 
+
+
+ 
+Check that: 
+•
+ the PaymentNotificationRequest message has been received correctly with all the required fields (result = NOT CAPTURED; responsecode = 51) 
+
+•
+ The browser has been re-directed properly to the address provided in  
+
+
+the PaymentNotificationResponse message. 
+ 
+Test case n°3 – Transaction canceled by buyer 
+ 
+Create and submit PaymentInit message. 
+ 
+Once the HPP is displayed, press ‘Cancel’ button. 
+ 
+Check that: 
+•
+ the PaymentNotificationRequest message has been received correctly with all the required fields (PaymentID, errorCode, errorService, errorDesc) 
+
+•
+ the “errorCode” field shows “PY20090” and the “errorDesc” field contains the error 
+
+
+description “Customer canceled transaction” 
+•
+ The browser has been re-directed properly to the address provided in  
+
+
+the PaymentNotificationResponse message. 
+ 
+Test case n°4 – Financial operations 
+ 
+Repeat test case n°1 and memorize Transaction ID contained in Notification message. 
+ 
+Create Payment Request message:  
+•
+ insert Transaction ID memorized in previous step 
+
+•
+ specify appropriate action type (2- Credit or 3-Purchase Reversal if original transaction was 1-Purchase, or, 5-Capture or 9-Preauthorization Void if original transaction was 4-Preauthorization). 
+
+
+ 
+Submit Payment Request message. 
+ 
+Check that: 
+•
+ the PaymentNotificationRequest message has been received correctly with all required fields (paymentid, tranid, trackid, msgDateTime, result, currencycode, amt, auth, udf1, udf2, udf3, udf4, udf5, cardtype, payinst, liability, responsecode). 
+
+•
+ the transaction is successful (ResultCode = "CAPTURED" if you used Action = 2 and 5, or 
+
+
+"VOIDED" if you used Action = 3 and 9) 
+•
+ The browser has been re-directed properly to the address provided in  
+
+
+the PaymentNotificationResponse message. 
+ 
+ 
+Note: Repeat test case for various financial operation (Credit, Purchase Reversal, Capture and Preauthorization Void). 
+  HPP Customization 
+The Hosted Payment Page presented by IPG to the Buyer can be customized by the Merchant. 
+Without customization, the HPP is proposed with the standard graphics and layout prepared by 
+the bank. 
+ 
+The Merchant can apply customization autonomously using the specific features on the Back Office site that allow you to: 
+•
+ Select one of the two graphic templates available, one developed vertically ("Layout1"), and the other horizontally ("Layout2"); 
+
+•
+ Vary the number of graphics settings (background colors, text, and button colour; font, borders and backgrounds of the input fields, thickness, color and curvature of the form borders, thickness and curvature of the buttons, etc.); 
+
+•
+ Upload an image (banner, logo etc.), and specify its position (template #1 only) 
+
+•
+ Set up a line of text with business reference data or another message for users (template #1 only) 
+
+•
+ Upload a background image, specifying the position of the screen and any repetition, and set the degree of transparency of the form to see the background beneath it. 
+
+
+ 
+Any change is displayed in real time in a sample HPP ("sample page") that is active while using the 
+customization features, while it has no effect on the actual production page. 
+ 
+A "Save" button, when clicked, makes sure that the changes are made immediately to the production HPP, unless the bank has requested an approval process. In this case: 
+•
+ The "Save" button only implies saving changes to the Sample Page (to resume work at a later time); 
+
+•
+ On completion of work, the "Submit for Approval" button appears to submit the customization for approval by the bank. Customization is then Pending until approved by the bank. In this status, the customization is "frozen" and cannot be modified further until the decision of the bank; 
+
+•
+ At the time of the decision: 
+
+
+a. The Merchant receives a notification on the Home Page by the Back Office bearing this decision. In case of refusal, the reason shall also be given. The Merchant also receives the notification by email; 
+b. If the decision is successful, the customization automatically becomes operational. No action is required by the Merchant. 
+c. In any case, the customization is unlocked and can be changed again 
+ 
+The Merchant can update their customization when appropriate without limitation. This allows the 
+application of temporary customizations for specific promotional campaigns or other business 
+needs. 
+ 
+It is also possible to cancel the customization (using "Revert"). In this case, the Buyers see 
+the HPP with the standard graphics as set by the bank 
+ 
+For full details on the customization features available and how they work, see the User Manual 
+for the Back Office, which is supplied upon service activation. 
+ 
+Examples of Layout1 and Layout2 
+ 
+
+Customization on Smartphones and Tablets 
+The HPP is carried out using responsive technology. This means that the display is optimal even 
+for users making payments using their smartphone or tablet, and the customization applied is 
+accurately reflected on these devices without any additional activities. 
+ 
+For smartphones, it is important to note that IPG will always display Layout1 (the vertical model) 
+regardless of the layout chosen by the Merchant (this choice has value for users using desktop or 
+tablet devices). It is recommended, therefore, to always complete the customization of both 
+layouts. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Appendix A – Response Codes 
+ 
+ 
+00 
+ Approved or completed successfully 
+ 
+01 
+ Refer to card issuer 
+ 
+02 
+ Refer to special conditions for card issuer 
+ 
+03 
+ Invalid merchant 
+ 
+04 
+ Pick-up card 
+ 
+05 
+ Do not honor 
+ 
+06 
+ Error 
+ 
+07 
+ Pick-up card, special condition 
+ 
+08 
+ Honor with identification 
+ 
+09 
+ Request in progress 
+ 
+11 
+ Approved (VIP) 
+ 
+12 
+ Invalid transaction 
+ 
+13 
+ Invalid amount 
+ 
+14 
+ Invalid card number (no such number) 
+ 
+15 
+ No such issuer 
+ 
+30 
+ Format error 
+ 
+31 
+ Bank not supported by switch 
+ 
+33 
+ Expired card 
+ 
+34 
+ Suspected fraud 
+ 
+35 
+ Card acceptor contact acquirer 
+ 
+36 
+ Restricted card 
+ 
+37 
+ Card acceptor call acquirer security 
+ 
+38 
+ Allowable PIN tries exceeded 
+ 
+39 
+ No credit account 
+ 
+41 
+ Lost card 
+ 
+43 
+ Stolen card, pick-up 
+ 
+51 
+ Not sufficient funds 
+ 
+54 
+ Expired card 
+ 
+55 
+ Incorrect personal identification number 
+ 
+56 
+ No card record 
+ 
+
+
+57 
+ Transaction not permitted to cardholder 
+ 
+58 
+ Transaction not permitted to terminal 
+ 
+61 
+ Exceeds withdrawal amount limit 
+ 
+62 
+ Restricted card 
+ 
+65 
+ Exceeds withdrawal frequency limit 
+ 
+68 
+ Response received too late 
+ 
+75 
+ Allowable number of PIN tries exceeded 
+ 
+from 
+76 to 
+89 
+ Reserved for private use 
+ 
+90 
+ Cut-off is in process, a switch is ending business for a day and 
+starting the next (transaction can be sent again in a few minutes) 
+ 
+91 
+ Issuer or switch is inoperative 
+ 
+92 
+ Financial institution or intermediate network facility cannot be 
+found for routing 
+ 
+94 
+ Duplicate transmission 
+ 
+96 
+ System malfunction 
+ 
+from 
+N0 
+to R8 
+ Reserved for private use 
+ 
+
+
+ 
+ 
+

@@ -194,21 +194,28 @@ error_log('Payment error: ' . $error);
 ```plaintext
 ipg33/
 ├── includes/
-│   ├── API/
-│   │   ├── class-api-handler.php
-│   │   └── interface-api-handler.php
 │   ├── Core/
-│   │   └── class-gateway.php
+│   │   └── class-novabankaipggateway.php
+│   ├── Exceptions/
+│   │   └── class-novabankaipgexception.php
 │   ├── Interfaces/
+│   │   ├── interface-api-handler.php
 │   │   ├── interface-data-handler.php
 │   │   └── interface-logger.php
 │   └── Utils/
-│       ├── class-data-handler.php
+│       ├── class-apihandler.php
+│       ├── class-datahandler.php
 │       └── class-logger.php
+│       └── class-messagehandler.php
+│       └── class-threedshandler.php
 ├── assets/
 │   ├── css/
+│   │   └── ipg-styles.css
+│   │   └── ipg-admin-styles.css
 │   └── js/
-└── class-ipg33.php
+│       └── ipg-scripts.js
+│       └── ipg-admin-scripts.js
+└── class-novabankaipg.php
 ```
 
 ### 11. Testing Considerations
@@ -332,4 +339,28 @@ Following these practices will ensure:
 - Reliable IPG integration
 - WooCommerce compatibility
 - Future extensibility
+
+The code base should follow these naming conventions:
+1. PHP methods and variables: snake_case
+2. JavaScript methods and variables: camelCase
+3. Class names: PascalCase
+4. Constants: UPPER_SNAKE_CASE
+
+The code base should consistently use:
+
+1. PHP:
+- Methods: `format_amount()`, `process_payment()`, `handle_return()`
+- Variables: `$order_id`, `$payment_data`, `$test_mode`
+- Constants: `NOVABANKAIPG_VERSION`
+
+2. JavaScript (remains in camelCase):
+- Methods: `handleSubmit()`, `showMessage()`, `initializeEvents()`
+- Variables: `loadingOverlay`, `submitButton`
+
+This maintains consistency with:
+- PHP PSR-12 standards
+- WordPress coding standards
+- JavaScript conventions
+- Existing WooCommerce patterns
+
 ```

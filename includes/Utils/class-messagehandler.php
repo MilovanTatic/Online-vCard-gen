@@ -66,6 +66,7 @@ class MessageHandler {
 	 */
 	public function generate_payment_init_request( array $data ): array {
 		try {
+			// Validate required fields.
 			$this->validate_required_fields(
 				$data,
 				array(
@@ -80,52 +81,7 @@ class MessageHandler {
 				)
 			);
 
-			$request = array(
-				'msgName'            => 'PaymentInitRequest',
-				'version'            => '1',
-				'id'                 => $data['id'],
-				'password'           => $data['password'],
-				'action'             => $data['action'] ?? '1', // Default to Purchase.
-				'currencycode'       => $this->data_handler->get_currency_code( $data['currency'] ),
-				'amt'                => $this->data_handler->format_amount( $data['amount'] ),
-				'trackid'            => $this->data_handler->format_track_id( $data['trackid'] ),
-				'responseURL'        => $data['responseURL'],
-				'errorURL'           => $data['errorURL'],
-				'langid'             => $this->data_handler->validate_language_code( $data['langid'] ),
-				'notificationFormat' => 'json',
-			);
-
-			// Optional fields.
-			if ( ! empty( $data['payinst'] ) ) {
-				$request['payinst'] = $this->validatePaymentInstrument( $data['payinst'] );
-			}
-
-			// Recurring payment fields.
-			if ( ! empty( $data['recurAction'] ) ) {
-				$request['RecurAction'] = $this->validateRecurAction( $data['recurAction'] );
-				if ( ! empty( $data['recurContractId'] ) ) {
-					$request['RecurContractId'] = substr( $data['recurContractId'], 0, 30 );
-				}
-			}
-
-			// Add buyer information if provided.
-			$this->addBuyerInformation( $request, $data );
-
-			// Add UDF fields.
-			$this->addUDFFields( $request, $data );
-
-			// Generate message verifier.
-			$request['msgVerifier'] = $this->generateMessageVerifier(
-				$request['msgName'],
-				$request['version'],
-				$request['id'],
-				$request['password'],
-				$request['amt'],
-				$request['trackid'],
-				$request['udf1'] ?? '',
-				$this->secret_key,
-				$request['udf5'] ?? ''
-			);
+			$request = $this->prepare_payment_init_request( $data );
 
 			$this->logger->debug( 'Generated PaymentInit request', array( 'request' => $request ) );
 
@@ -585,5 +541,64 @@ class MessageHandler {
 		}
 
 		return $response['transactions'][0] ?? null;
+	}
+
+	/**
+	 * Prepare PaymentInit request data.
+	 *
+	 * @param array $data Payment initialization data.
+	 * @return array Prepared request data.
+	 * @throws NovaBankaIPGException When data validation fails.
+	 */
+	private function prepare_payment_init_request( array $data ): array {
+		$request = array(
+			'msgName'            => 'PaymentInitRequest',
+			'version'            => '1',
+			'id'                 => $data['id'],
+			'password'           => $data['password'],
+			'action'             => '1',  // Fixed value for standard payment
+			'currencycode'       => $this->data_handler->get_currency_code($data['currency']),
+			'amt'                => $this->data_handler->format_amount($data['amount']),
+			'trackid'            => $this->data_handler->format_track_id($data['trackid']),
+			'responseURL'        => $data['responseURL'],
+			'errorURL'           => $data['errorURL'],
+			'langid'             => $this->data_handler->validate_language_code($data['langid']),
+			'notificationFormat' => 'json',
+		);
+
+		// Only add RecurAction if it's a recurring payment
+		if (isset($data['recurAction']) && !empty($data['recurAction'])) {
+			$request['RecurAction'] = $this->validate_recur_action($data['recurAction']);
+			if (!empty($data['recurContractId'])) {
+				$request['RecurContractId'] = substr($data['recurContractId'], 0, 30);
+			}
+		}
+
+		// Add buyer information if provided
+		if (!empty($data['email'])) {
+			$request['buyerEmailAddress'] = $data['email'];
+		}
+
+		// Add UDF fields
+		if (!empty($data['udf1'])) {
+			$request['udf1'] = $data['udf1'];
+		}
+
+		// Generate message verifier
+		$request['msgVerifier'] = $this->generate_message_verifier(
+			$request['msgName'],
+			$request['version'],
+			$request['id'],
+			$request['password'],
+			$request['amt'],
+			$request['trackid'],
+			$request['udf1'] ?? '',
+			$this->secret_key,
+			$request['udf5'] ?? ''
+		);
+
+		$this->logger->debug('Generated PaymentInit request', array('request' => $request));
+
+		return $request;
 	}
 }

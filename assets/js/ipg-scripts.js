@@ -1,5 +1,3 @@
-// assets/js/ipg-scripts.js
-
 (function($) {
     'use strict';
 
@@ -8,7 +6,6 @@
             this.form = $('form.checkout');
             this.submitButton = $('button#place_order');
             this.loadingOverlay = $('.ipg-loading-overlay');
-
             this.initializeEvents();
         },
 
@@ -52,10 +49,18 @@
         },
 
         showMessage: function(message, type) {
-            const messageClass = type === 'success' ? 'ipg-status-success' : 'ipg-status-error';
-            const messageHtml = `<div class="ipg-status-message ${messageClass}">${message}</div>`;
+            // Remove existing messages
+            $('.woocommerce-error, .woocommerce-message, .ipg-status-message').remove();
+
+            // Create message element using WooCommerce classes for consistency
+            const messageHtml = type === 'success' 
+                ? `<div class="woocommerce-message">${message}</div>`
+                : `<div class="woocommerce-error">${message}</div>`;
             
+            // Add message to WooCommerce notices wrapper
             $('.woocommerce-notices-wrapper').first().html(messageHtml);
+
+            // Scroll to message
             $('html, body').animate({
                 scrollTop: $('.woocommerce-notices-wrapper').first().offset().top - 100
             }, 500);

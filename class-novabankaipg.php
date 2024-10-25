@@ -35,6 +35,7 @@ define( 'NOVABANKAIPG_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'NOVABANKAIPG_VERSION', '1.0.0' );
 
 // Include necessary interfaces and classes.
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Exceptions/class-novabankaipgexception.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-logger.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-api-handler.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-data-handler.php';
@@ -175,7 +176,8 @@ class NovaBankaIPG {
 			$settings['terminal_password'],
 			$settings['secret_key'],
 			$this->logger,
-			$this->data_handler
+			$this->data_handler,
+			$settings['test_mode'] ?? 'yes' // Add test_mode parameter with default 'yes'.
 		);
 
 		// Initialize 3DS Handler.
@@ -284,6 +286,7 @@ class NovaBankaIPG {
 			'terminal_id'       => $settings['terminal_id'] ?? '',
 			'terminal_password' => $settings['terminal_password'] ?? '',
 			'secret_key'        => $settings['secret_key'] ?? '',
+			'test_mode'         => $settings['test_mode'] ?? 'yes',
 		);
 	}
 }
