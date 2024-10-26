@@ -43,6 +43,7 @@ require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-logger.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-datahandler.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-apihandler.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-threedshandler.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-messagehandler.php';
 
 /**
  * Main plugin class for NovaBanka IPG33 Payment Gateway
@@ -131,6 +132,7 @@ class NovaBankaIPG {
 		add_filter( 'woocommerce_payment_gateways', array( $this, 'add_gateway' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_scripts' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_scripts' ) );
+		add_action( 'woocommerce_api_novabankaipg', array( $this, 'handle_wc_api' ) );
 	}
 
 	/**

@@ -135,6 +135,33 @@ class Logger implements LoggerInterface {
 	}
 
 	/**
+	 * Log payment process events
+	 *
+	 * @param string $process Process identifier (A or B).
+	 * @param string $event Event description.
+	 * @param array  $data Event data.
+	 */
+	public function log_payment_process(string $process, string $event, array $data = []): void {
+		$context = [
+			'process' => $process,
+			'event'   => $event,
+			'data'    => $this->mask_sensitive_data($data)
+		];
+
+		$this->debug(sprintf('Payment Process %s: %s', $process, $event), $context);
+	}
+
+	/**
+	 * Log IPG notification
+	 *
+	 * @param array $notification Notification data.
+	 */
+	public function log_notification(array $notification): void {
+		$masked_data = $this->mask_sensitive_data($notification);
+		$this->debug('IPG notification received', ['notification' => $masked_data]);
+	}
+
+	/**
 	 * Format log message with context
 	 *
 	 * @param string $message Message to format.
@@ -199,6 +226,29 @@ class Logger implements LoggerInterface {
 	}
 
 	/**
+	 * Mask sensitive data in logs
+	 *
+	 * @param array $data Data to mask.
+	 * @return array
+	 */
+	private function mask_sensitive_data(array $data): array {
+		$sensitive_fields = [
+			'password',
+			'terminal_password',
+			'secret_key',
+			'msgVerifier'
+		];
+
+		foreach ($data as $key => &$value) {
+			if (in_array($key, $sensitive_fields, true)) {
+				$value = '***MASKED***';
+			}
+		}
+
+		return $data;
+	}
+
+	/**
 	 * Set debug mode
 	 *
 	 * @param bool $debug_mode Whether debug mode is enabled.
@@ -224,5 +274,39 @@ class Logger implements LoggerInterface {
 		);
 
 		$this->debug( $message, $data );
+	}
+
+	/**
+	 * Log IPG API request and response
+	 */
+	public function log_api_communication($direction, $endpoint, $data) {
+		$masked_data = $this->mask_sensitive_data($data);
+		
+		$context = [
+			'timestamp' => current_time('mysql'),
+			'endpoint' => $endpoint,
+			'data' => $masked_data,
+			'headers' => $this->get_request_headers()
+		];
+
+		$this->debug(
+			sprintf('IPG %s | Endpoint: %s', $direction, $endpoint),
+			$context
+		);
+	}
+
+	/**
+	 * Get request headers safely
+	 */
+	private function get_request_headers() {
+		$headers = [];
+		foreach ($_SERVER as $key => $value) {
+			if (strpos($key, 'HTTP_') === 0) {
+				$header = str_replace('HTTP_', '', $key);
+				$header = str_replace('_', '-', strtolower($header));
+				$headers[$header] = $value;
+			}
+		}
+		return $headers;
 	}
 }

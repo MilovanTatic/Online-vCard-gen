@@ -2,24 +2,23 @@
 
 ## Overview
 
-The payment flow involves multiple steps across different domains with asynchronous communication between IPG and WooCommerce.
+The payment flow involves server-to-server communication between IPG and WooCommerce through a notification callback system.
 
 ## Flow Diagram
 
-Customer Our Site IPG Bank
-| | | |
-|---(1)Place Order--------->| | |
-| |---(2)PaymentInit------->| |
-| |<---(3)HPP URL-----------| |
-|<---(4)Redirect to HPP-----| | |
-| | | |
-|---(5)Enter Card Details------------------------->| |
-| | |---(6)3DS Auth------------>|
-| | |<---(7)Auth Response-------|
-| |<---(8)Payment Notification| |
-| |---(9)Process Order----->| |
-|<---(10)Redirect to Result-| | |
-
+Customer         Our Site              IPG                Bank
+   |                |                   |                   |
+   |---(1)Checkout->|                   |                   |
+   |                |---(2)PaymentInit->|                   |
+   |                |<-(3)HPP URL-------|                   |
+   |<-(4)Redirect---|                   |                   |
+   |                |                   |                   |
+   |---(5)Enter Card Details---------->|                   |
+   |                |                   |---(6)3DS Auth---->|
+   |                |                   |<-(7)Auth Response-|
+   |                |<-(8)POST Notification-|               |
+   |                |---(9)Return URL-->|                   |
+   |<-(10)Final Redirect---------------|                   |
 
 ## Communication Steps
 
@@ -31,9 +30,8 @@ Customer Our Site IPG Bank
    ```php
    // Send to IPG
    $payment_data = [
-       'response_url' => WC()->api_request_url('novabankaipg'),
-       'success_url' => $success_url,
-       'failure_url' => $failure_url
+       'responseURL' => WC()->api_request_url('novabankaipg'),  // Notification callback URL
+       'errorURL'    => $order->get_checkout_payment_url(true)  // Error return URL
    ];
    ```
 
@@ -47,62 +45,65 @@ Customer Our Site IPG Bank
    - IPG processes with bank
    - Order status unchanged
 
-5. **Asynchronous Notification**
+5. **Payment Notification**
    ```php
-   // IPG calls our notification URL
-   add_action('woocommerce_api_novabankaipg', array($this, 'handle_gateway_response'));
+   // IPG POSTs to our notification URL
+   add_action('woocommerce_api_novabankaipg', array($this, 'handle_notification_callback'));
    ```
 
-6. **Order Update**
+6. **Order Update & Response**
    - Process notification
    - Update order status
-   - Store transaction data
-
-7. **Customer Return**
-   ```php
-   // Handle customer return separately
-   add_action('woocommerce_api_novabankaipg_success', array($this, 'handle_success_return'));
-   add_action('woocommerce_api_novabankaipg_failure', array($this, 'handle_failure_return'));
-   ```
+   - Return browserRedirectionURL to IPG
 
 ## API Endpoints
 
-### 1. Notification Endpoint
-
-php
+### 1. Notification Callback Endpoint
+```php
 // /wc-api/novabankaipg
-public function handle_gateway_response() {
-// Process IPG notification
-// Update order status
-// Return response to IPG
+public function handle_notification_callback() {
+    try {
+        // Get POST data from IPG
+        $notification = $this->get_post_data();
+        
+        // Verify notification signature
+        if (!$this->api_handler->verify_signature($notification)) {
+            throw new Exception('Invalid signature');
+        }
+        
+        // Process payment result
+        $order = $this->process_payment_result($notification);
+        
+        // Prepare response for IPG
+        $response = [
+            'msgName' => 'PaymentNotificationResponse',
+            'version' => '1',
+            'paymentID' => $notification['paymentid'],
+            'browserRedirectionURL' => $this->get_return_url($order)
+        ];
+        
+        // Add message verifier
+        $response['msgVerifier'] = $this->api_handler->generate_message_verifier([
+            $response['msgName'],
+            $response['version'],
+            $response['paymentID'],
+            $this->get_secret_key(),
+            $response['browserRedirectionURL']
+        ]);
+        
+        // Return JSON response to IPG
+        wp_send_json($response);
+        
+    } catch (Exception $e) {
+        wp_send_json_error($e->getMessage(), 500);
+    }
 }
-
-
-### 2. Success Return Endpoint
-
-php
-// /wc-api/novabankaipg_success
-public function handle_success_return() {
-// Verify order
-// Redirect to thank you page
-}
-
-### 3. Failure Return Endpoint
-
-php
-// /wc-api/novabankaipg_failure
-public function handle_failure_return() {
-// Verify order
-// Show error message
-// Redirect to payment page
-}
+```
 
 ## Order Status Flow
-
-
-plaintext
+```
 pending -> on-hold -> processing/failed -> completed
-
+```
 
 - **pending**: Initial order creation
 - **on-hold**: During HPP/3DS process
@@ -112,14 +113,7 @@ pending -> on-hold -> processing/failed -> completed
 
 ## Security Considerations
 
-1. **URL Validation**
-   ```php
-   // Verify order key
-   $order_key = wc_clean($_GET['order-key'] ?? '');
-   $order = wc_get_orders(['order_key' => $order_key, 'limit' => 1])[0] ?? null;
-   ```
-
-2. **Notification Verification** to be implemented later after debugging
+1. **Notification Verification**
    ```php
    // Verify IPG signature
    if (!$this->api_handler->verify_signature($notification)) {
@@ -127,44 +121,56 @@ pending -> on-hold -> processing/failed -> completed
    }
    ```
 
-3. **Order State Validation**
+2. **Order State Validation**
    - Check current order status
    - Prevent duplicate processing
    - Validate payment amounts
 
+3. **Response Signing**
+   ```php
+   // Generate response signature
+   $msgVerifier = $this->api_handler->generate_message_verifier([
+       'PaymentNotificationResponse',
+       '1',
+       $payment_id,
+       $secret_key,
+       $redirect_url
+   ]);
+   ```
+
 ## Implementation Notes
 
-1. **URL Generation**
+1. **Notification Handling**
    ```php
-   private function get_gateway_urls($order) {
-       return [
-           'notification_url' => WC()->api_request_url('novabankaipg'),
-           'success_url' => add_query_arg([
-               'wc-api' => 'novabankaipg_success',
-               'order-key' => $order->get_order_key()
-           ], home_url('/')),
-           'failure_url' => add_query_arg([
-               'wc-api' => 'novabankaipg_failure',
-               'order-key' => $order->get_order_key()
-           ], home_url('/'))
-       ];
+   private function process_payment_result($notification) {
+       $order = wc_get_order($notification['trackid']);
+       
+       if (!$order) {
+           throw new Exception('Order not found');
+       }
+       
+       // Store transaction data
+       $this->store_transaction_data($order, $notification);
+       
+       // Update order status based on result
+       if ($notification['result'] === 'CAPTURED') {
+           $order->payment_complete($notification['tranid']);
+       } else {
+           $order->update_status('failed', 'Payment failed: ' . $notification['result']);
+       }
+       
+       return $order;
    }
    ```
 
 2. **Data Storage**
    ```php
-   // Store transaction data
-   $order->update_meta_data('_novabankaipg_payment_id', $payment_id);
-   $order->update_meta_data('_novabankaipg_transaction_id', $transaction_id);
-   ```
-
-3. **Error Handling**
-   ```php
-   try {
-       // Process notification
-   } catch (Exception $e) {
-       $this->logger->error('Payment notification error: ' . $e->getMessage());
-       wp_die($e->getMessage(), 'Payment Error', array('response' => 500));
+   private function store_transaction_data($order, $notification) {
+       $order->update_meta_data('_novabankaipg_payment_id', $notification['paymentid']);
+       $order->update_meta_data('_novabankaipg_transaction_id', $notification['tranid']);
+       $order->update_meta_data('_novabankaipg_result', $notification['result']);
+       $order->update_meta_data('_novabankaipg_auth_code', $notification['auth']);
+       $order->save();
    }
    ```
 
@@ -172,18 +178,18 @@ pending -> on-hold -> processing/failed -> completed
 
 1. **Notification Testing**
    - Test with IPG test environment
-   - Verify all notification scenarios
-   - Check order status transitions
+   - Verify signature validation
+   - Test all payment result scenarios
 
-2. **Customer Return Testing**
-   - Test success/failure redirects
-   - Verify order status display
-   - Check error message handling
-
-3. **Security Testing**
+2. **Error Handling**
    - Test invalid signatures
-   - Test invalid order keys
+   - Test missing order IDs
    - Test duplicate notifications
+
+3. **Response Validation**
+   - Verify response format
+   - Test signature generation
+   - Validate redirect URLs
 
 ## Debugging
 
@@ -269,4 +275,3 @@ private function generate_message_verifier($fields) {
     return base64_encode(hash('sha256', $message, true));
 }
 ```
-

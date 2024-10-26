@@ -45,16 +45,40 @@ class MessageHandler {
 	private $logger;
 
 	/**
+	 * Terminal ID.
+	 *
+	 * @var string
+	 */
+	private $terminal_id;
+
+	/**
+	 * Terminal password.
+	 *
+	 * @var string
+	 */
+	private $terminal_password;
+
+	/**
 	 * Constructor
 	 *
-	 * @param string      $secret_key   Secret key for message verification.
-	 * @param DataHandler $data_handler Data handler instance.
-	 * @param Logger      $logger       Logger instance.
+	 * @param string      $terminal_id       Terminal ID.
+	 * @param string      $terminal_password Terminal password.
+	 * @param string      $secret_key        Secret key for message verification.
+	 * @param DataHandler $data_handler      Data handler instance.
+	 * @param Logger      $logger            Logger instance.
 	 */
-	public function __construct( $secret_key, DataHandler $data_handler, Logger $logger ) {
-		$this->secret_key   = $secret_key;
+	public function __construct(
+		string $terminal_id,
+		string $terminal_password,
+		string $secret_key,
+		DataHandler $data_handler,
+		Logger $logger
+	) {
+		$this->terminal_id = $terminal_id;
+		$this->terminal_password = $terminal_password;
+		$this->secret_key = $secret_key;
 		$this->data_handler = $data_handler;
-		$this->logger       = $logger;
+		$this->logger = $logger;
 	}
 
 	/**

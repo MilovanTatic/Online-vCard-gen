@@ -12,6 +12,7 @@ use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use NovaBankaIPG\Interfaces\APIHandlerInterface;
 use NovaBankaIPG\Interfaces\Logger;
 use NovaBankaIPG\Utils\DataHandler;
+use NovaBankaIPG\Utils\MessageHandler;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -73,6 +74,13 @@ class APIHandler implements APIHandlerInterface {
 	private $test_mode;
 
 	/**
+	 * Message handler instance
+	 *
+	 * @var MessageHandler
+	 */
+	private $message_handler;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param string      $api_endpoint      API endpoint URL.
@@ -99,6 +107,13 @@ class APIHandler implements APIHandlerInterface {
 		$this->logger            = $logger;
 		$this->data_handler      = $data_handler;
 		$this->test_mode         = $test_mode;
+		$this->message_handler   = new MessageHandler(
+			$this->terminal_id,
+			$this->terminal_password,
+			$this->secret_key,
+			$this->data_handler,
+			$this->logger
+		);
 	}
 
 	/**
@@ -403,77 +418,30 @@ class APIHandler implements APIHandlerInterface {
 	/**
 	 * Verify message signature
 	 *
-	 * @param array  $data      Data to verify.
-	 * @param string $signature Signature to check against.
+	 * @param array  $data Data to verify.
+	 * @param string $message_type Type of message being verified.
 	 * @return bool
 	 */
-	public function verify_signature( array $data, string $signature ): bool {
-		// Get fields based on message type
-		$fields = array();
-
-		switch ( $data['msgName'] ) {
-			case 'PaymentInitResponse':
-				$fields = array(
-					$data['msgName'],
-					$data['version'],
-					$data['msgDateTime'],
-					$data['paymentid'],
-					$this->secret_key,
-					$data['browserRedirectionURL'],
-				);
-				break;
-
-			case 'PaymentNotificationRequest':
-				$fields = array(
-					$data['msgName'],
-					$data['version'],
-					$data['msgDateTime'],
-					$data['paymentid'],
-					$data['tranid'],
-					$data['amt'],
-					$data['trackid'],
-					$data['udf1'] ?? '',
-					$this->secret_key,
-					$data['udf5'] ?? '',
-				);
-				break;
+	public function verify_message_signature( array $data, string $message_type = '' ): bool {
+		if ( ! isset( $data['msgVerifier'] ) ) {
+			return false;
 		}
+
+		$signature = $data['msgVerifier'];
+		$fields    = $this->get_verification_fields( $data, $message_type );
 
 		$calculated = $this->generate_message_verifier( $fields );
 		return hash_equals( $signature, $calculated );
 	}
 
 	/**
-	 * Generate message verifier hash
+	 * Verify IPG notification
 	 *
-	 * @param array $fields Fields to include in hash.
-	 * @return string
-	 */
-	public function generate_message_verifier( array $fields ): string {
-		$message = implode( '', array_filter( $fields ) );
-		$message = preg_replace( '/\s+/', '', $message );
-		return base64_encode( hash( 'sha256', $message, true ) );
-	}
-
-	/**
-	 * Log an error message
-	 *
-	 * @param string $error_message The error message to log.
-	 * @param array  $error_context Additional context for the error.
-	 */
-	private function log_error_message( string $error_message, array $error_context = array() ): void {
-		$this->logger->error( $error_message, $error_context );
-	}
-
-	/**
-	 * Verify the notification data
-	 *
-	 * @param array $notification Payment notification data.
+	 * @param array $notification Notification data.
 	 * @return bool
 	 */
 	public function verify_notification( array $notification ): bool {
-		// Verify the notification data.
-		return $this->verify_signature( $notification, $notification['msgVerifier'] );
+		return $this->verify_message_signature( $notification, 'PaymentNotificationRequest' );
 	}
 
 	/**
@@ -534,10 +502,10 @@ class APIHandler implements APIHandlerInterface {
 	 */
 	private function get_api_endpoint( string $request_type = 'PaymentInitRequest' ): string {
 		$base_url = $this->test_mode
-			? 'https://ipgtest.novabanka.com'
-			: 'https://ipg.novabanka.com';
+			? 'https://ipgtest.novabanka.com/IPGWeb/servlet'
+			: 'https://ipg.novabanka.com/IPGWeb/servlet';
 
-		return trailingslashit( $base_url ) . 'IPGWeb/servlet/' . $request_type;
+		return trailingslashit( $base_url ) . $request_type;
 	}
 
 	/**
@@ -563,7 +531,7 @@ class APIHandler implements APIHandlerInterface {
 			'Sending API request.',
 			array(
 				'endpoint' => $endpoint,
-				'data'     => $this->mask_sensitive_data( $data ),
+				'data'     => $data,
 				'headers'  => array(
 					'Content-Type' => 'application/json',
 					'Accept'       => 'application/json',
@@ -622,5 +590,156 @@ class APIHandler implements APIHandlerInterface {
 		}
 
 		return $response_data;
+	}
+
+	/**
+	 * Initialize payment with IPG (Process A)
+	 *
+	 * @param array $payment_data Payment initialization data.
+	 * @return array IPG response data.
+	 * @throws NovaBankaIPGException If request fails.
+	 */
+	public function initialize_payment( array $payment_data ): array {
+		$this->logger->debug(
+			'Starting payment initialization',
+			array(
+				'input_data' => $this->mask_sensitive_data( $payment_data ),
+			)
+		);
+
+		// Add required fields to payment data
+		$payment_data = array_merge(
+			$payment_data,
+			array(
+				'id'                 => $this->terminal_id,
+				'password'           => $this->terminal_password,
+				'langid'             => 'USA',
+				'action'             => '1',
+				'paymentPageMode'    => '0',
+				'notificationFormat' => 'json',
+				'cardSHA2'           => 'Y',
+				'version'            => '1',
+				'msgName'            => 'PaymentInitRequest',
+				'payinst'            => 'VPAS',
+				'recurAction'        => '',
+			)
+		);
+
+		$request = $this->message_handler->generate_payment_init_request( $payment_data );
+
+		$endpoint = $this->get_api_endpoint( 'PaymentInitRequest' );
+		$response = $this->send_api_request( $endpoint, $request );
+
+		// Append PaymentID to browserRedirectionURL
+		if (isset($response['browserRedirectionURL']) && isset($response['paymentid'])) {
+			$response['browserRedirectionURL'] = add_query_arg(
+				'PaymentID',
+				$response['paymentid'],
+				$response['browserRedirectionURL']
+			);
+		}
+
+		$this->logger->debug(
+			'Payment initialization completed',
+			array(
+				'payment_id'   => $response['paymentid'] ?? null,
+				'redirect_url' => $response['browserRedirectionURL'] ?? null,
+			)
+		);
+
+		return $response;
+	}
+
+	/**
+	 * Verify IPG notification signature (Process B)
+	 *
+	 * @param array $notification Notification data from IPG.
+	 * @return bool Whether signature is valid.
+	 */
+	public function verify_signature( array $notification ): bool {
+		return $this->message_handler->verify_notification_signature( $notification );
+	}
+
+	private function mask_sensitive_data(array $data): array {
+		$sensitive_fields = [
+			'password',
+			'secret_key',
+			'terminal_password',
+			'msgVerifier'
+		];
+		
+		$masked_data = $data;
+		foreach ($sensitive_fields as $field) {
+			if (isset($masked_data[$field])) {
+				$masked_data[$field] = '***REDACTED***';
+			}
+		}
+		
+		return $masked_data;
+	}
+
+	private function make_request($endpoint, $data) {
+		// Log request
+		$this->logger->log_api_communication('REQUEST', $endpoint, $data);
+
+		$response = wp_remote_post(
+			$endpoint,
+			array(
+				'body'    => wp_json_encode($data),
+				'timeout' => 45,
+				'headers' => array(
+					'Content-Type' => 'application/json',
+					'Accept'       => 'application/json',
+				),
+			)
+		);
+
+		// Log response
+		$this->logger->log_api_communication('RESPONSE', $endpoint, [
+			'status_code' => wp_remote_retrieve_response_code($response),
+			'body' => json_decode(wp_remote_retrieve_body($response), true)
+		]);
+
+		if ( is_wp_error( $response ) ) {
+			$error_message = $response->get_error_message();
+			$this->log_debug(
+				'API request failed.',
+				array(
+					'error'    => $error_message,
+					'wp_error' => $response->get_error_codes(),
+				)
+			);
+			throw NovaBankaIPGException::apiError(
+				sprintf( 'Gateway connection failed: %s.', esc_html( $error_message ) )
+			);
+		}
+
+		$status_code = wp_remote_retrieve_response_code( $response );
+		$headers     = wp_remote_retrieve_headers( $response );
+		$body        = wp_remote_retrieve_body( $response );
+
+		$this->log_debug(
+			'API response received.',
+			array(
+				'status_code' => $status_code,
+				'headers'     => $headers,
+				'body'        => $body,
+			)
+		);
+
+		$result = json_decode( $body, true );
+
+		if ( json_last_error() !== JSON_ERROR_NONE ) {
+			$this->log_debug(
+				'Invalid JSON response.',
+				array(
+					'json_error' => json_last_error_msg(),
+					'raw_body'   => $body,
+				)
+			);
+			throw NovaBankaIPGException::apiError( 'Invalid JSON response from gateway.' );
+		}
+
+		return $result;
 	}
 }
