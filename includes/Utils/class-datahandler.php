@@ -1,25 +1,21 @@
 <?php
 /**
- * Data Handler Implementation
+ * DataHandler Utility Class
  *
- * @package     NovaBankaIPG\Utils
- * @since       1.0.0
+ * This class is responsible for handling various data formatting and validation processes,
+ * such as formatting payment amounts, phone numbers, item quantities, and validating language codes.
+ *
+ * @package NovaBankaIPG\Utils
+ * @since 1.0.1
  */
 
 namespace NovaBankaIPG\Utils;
 
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 
-defined( 'ABSPATH' ) || exit;
-
-/**
- * DataHandler Class
- *
- * Handles data formatting and validation according to IPG specifications.
- */
 class DataHandler {
 	/**
-	 * Currency codes mapping as per IPG specs
+	 * Currency codes mapping as per IPG specs.
 	 *
 	 * @var array
 	 */
@@ -31,7 +27,7 @@ class DataHandler {
 	);
 
 	/**
-	 * Maximum field lengths as per IPG specs
+	 * Maximum field lengths as per IPG specs.
 	 *
 	 * @var array
 	 */
@@ -48,8 +44,7 @@ class DataHandler {
 	);
 
 	/**
-	 * Format amount according to IPG specifications.
-	 * Format: NNNNNNNNNN.NN (max value 9999999999.99)
+	 * Format the payment amount to the required decimal places.
 	 *
 	 * @param float|string $amount Amount to format.
 	 * @return string
@@ -75,24 +70,24 @@ class DataHandler {
 	}
 
 	/**
-	 * Format phone number according to IPG specifications.
-	 * Max length: 20, only numbers and + allowed.
+	 * Format a phone number to the expected format for API communication.
 	 *
-	 * @param string $phone Phone number.
+	 * @param string $phone_number The phone number to format.
 	 * @return string|null
 	 */
-	public function format_phone( $phone ) {
-		if ( empty( $phone ) ) {
+	public static function format_phone( $phone_number ) {
+		if ( empty( $phone_number ) ) {
 			return null;
 		}
 
 		// Remove everything except numbers and +.
-		$phone = preg_replace( '/[^0-9+]/', '', $phone );
+		$phone_number = preg_replace( '/[^0-9+]/', '', $phone_number );
 
 		// Ensure + is only at the start.
-		$phone = preg_replace( '/(?!^)\+/', '', $phone );
+		$phone_number = preg_replace( '/(?!^)\+/', '', $phone_number );
 
-		return substr( $phone, 0, self::FIELD_LENGTHS['phone'] );
+		// Truncate to max length defined in FIELD_LENGTHS.
+		return substr( $phone_number, 0, self::FIELD_LENGTHS['phone'] );
 	}
 
 	/**
@@ -108,128 +103,38 @@ class DataHandler {
 			return null;
 		}
 
+		// Truncate to max length defined in FIELD_LENGTHS.
 		return substr( $email, 0, self::FIELD_LENGTHS['email'] );
 	}
 
 	/**
-	 * Get numeric currency code for IPG
+	 * Validate the language code to ensure it meets expected standards.
 	 *
-	 * @param string $currency_code Alpha currency code (e.g., 'BAM', 'EUR', 'USD').
-	 * @return string Numeric currency code.
-	 * @throws NovaBankaIPGException If currency is not supported.
+	 * @param string $language_code The language code to validate.
+	 * @return bool True if the language code is valid, false otherwise.
 	 */
-	public function get_currency_code( string $currency_code ): string {
-		$currency_map = array(
-			'BAM' => '977', // Bosnian Convertible Mark.
-			'EUR' => '978', // Euro.
-			'USD' => '840', // US Dollar.
-			'GBP' => '826', // British Pound.
-			'HRK' => '191', // Croatian Kuna.
-			'RSD' => '941', // Serbian Dinar.
-			// Add other currencies as needed.
-		);
-
-		$code = strtoupper( $currency_code );
-		if ( ! isset( $currency_map[ $code ] ) ) {
-			throw new NovaBankaIPGException(
-				sprintf( 'Currency %s is not supported', $currency_code ),
-				'INVALID_CURRENCY'
-			);
-		}
-
-		return $currency_map[ $code ];
+	public static function validate_language_code( $language_code ) {
+		// Ensure language code is two or three letters (e.g., 'EN', 'FR', 'ESP').
+		return preg_match( '/^[a-zA-Z]{2,3}$/', $language_code ) === 1;
 	}
 
 	/**
-	 * Validate and format track ID.
-	 * Must be unique per transaction, max 255 chars.
+	 * Format the item quantity to an integer value.
 	 *
-	 * @param string $track_id Track ID.
-	 * @return string
-	 * @throws NovaBankaIPGException If the track ID is invalid.
+	 * @param float $quantity The quantity to format.
+	 * @return int The formatted item quantity.
 	 */
-	public function format_track_id( $track_id ) {
-		$track_id = sanitize_text_field( $track_id );
-
-		if ( empty( $track_id ) ) {
-			throw NovaBankaIPGException::invalidRequest( 'Track ID is required.' );
-		}
-
-		if ( strlen( $track_id ) > 255 ) {
-			throw NovaBankaIPGException::invalidRequest( 'Track ID exceeds maximum length of 255 characters.' );
-		}
-
-		return $track_id;
+	public static function format_quantity( $quantity ) {
+		return (int) $quantity;
 	}
 
 	/**
-	 * Format UDF (User Defined Field).
-	 * Optional fields, max 255 chars each.
+	 * Get currency code based on the currency name.
 	 *
-	 * @param string $value UDF value.
-	 * @return string|null
+	 * @param string $currency Currency name (e.g., 'EUR', 'USD').
+	 * @return string|null Currency code or null if not found.
 	 */
-	public function format_udf( $value ) {
-		if ( empty( $value ) ) {
-			return null;
-		}
-
-		return substr( sanitize_text_field( $value ), 0, 255 );
-	}
-
-	/**
-	 * Format address data according to IPG specifications.
-	 *
-	 * @param array $address Address data.
-	 * @return array
-	 */
-	public function format_address( $address ) {
-		$formatted = array();
-
-		if ( ! empty( $address['country'] ) ) {
-			$formatted['country'] = strtoupper( substr( $address['country'], 0, 3 ) );
-		}
-
-		if ( ! empty( $address['city'] ) ) {
-			$formatted['city'] = substr( sanitize_text_field( $address['city'] ), 0, self::FIELD_LENGTHS['city'] );
-		}
-
-		if ( ! empty( $address['zip'] ) ) {
-			$formatted['zip'] = substr( sanitize_text_field( $address['zip'] ), 0, self::FIELD_LENGTHS['zip'] );
-		}
-
-		if ( ! empty( $address['addrLine1'] ) ) {
-			$formatted['addrLine1'] = substr( sanitize_text_field( $address['addrLine1'] ), 0, self::FIELD_LENGTHS['address1'] );
-		}
-
-		if ( ! empty( $address['addrLine2'] ) ) {
-			$formatted['addrLine2'] = substr( sanitize_text_field( $address['addrLine2'] ), 0, self::FIELD_LENGTHS['address2'] );
-		}
-
-		if ( ! empty( $address['addrLine3'] ) ) {
-			$formatted['addrLine3'] = substr( sanitize_text_field( $address['addrLine3'] ), 0, self::FIELD_LENGTHS['address3'] );
-		}
-
-		return array_filter( $formatted );
-	}
-
-	/**
-	 * Validate language code.
-	 * Supported codes: ITA, USA, FRA, DEU, ESP, SLO, SRB, POR, RUS.
-	 *
-	 * @param string $lang_code Language code.
-	 * @return string
-	 * @throws NovaBankaIPGException If the language code is unsupported.
-	 */
-	public function validate_language_code( $lang_code ) {
-		$supported_langs = array( 'ITA', 'USA', 'FRA', 'DEU', 'ESP', 'SLO', 'SRB', 'POR', 'RUS' );
-
-		$lang_code = strtoupper( $lang_code );
-
-		if ( ! in_array( $lang_code, $supported_langs, true ) ) {
-			throw NovaBankaIPGException::invalidRequest( 'Unsupported language code.' );
-		}
-
-		return $lang_code;
+	public function get_currency_code( $currency ) {
+		return self::CURRENCY_CODES[ $currency ] ?? null;
 	}
 }

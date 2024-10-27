@@ -2,8 +2,8 @@
 /**
  * Config Utility Class
  *
- * This class is responsible for handling the plugin configuration settings.
- * It provides a convenient way to retrieve and manage configuration options for the NovaBanka IPG plugin.
+ * This class is responsible for managing the plugin configuration settings.
+ * It provides methods to retrieve and update configuration options for the NovaBanka IPG plugin.
  *
  * @package NovaBankaIPG\Utils
  * @since 1.0.1
@@ -11,14 +11,6 @@
 
 namespace NovaBankaIPG\Utils;
 
-/**
- * Class Config
- *
- * Handles plugin configuration settings and provides methods to manage them.
- *
- * @package NovaBankaIPG\Utils
- * @since 1.0.1
- */
 class Config {
 	/**
 	 * Retrieve a setting value by key.
@@ -51,5 +43,23 @@ class Config {
 		$settings         = get_option( 'woocommerce_novabankaipg_settings', array() );
 		$settings[ $key ] = $value;
 		return update_option( 'woocommerce_novabankaipg_settings', $settings );
+	}
+
+	/**
+	 * Determine if the plugin is in test mode.
+	 *
+	 * @return bool True if test mode is enabled, false otherwise.
+	 */
+	public static function is_test_mode() {
+		return self::get_setting( 'test_mode' ) === 'yes';
+	}
+
+	/**
+	 * Determine if debug logging is enabled.
+	 *
+	 * @return bool True if debug logging is enabled, false otherwise.
+	 */
+	public static function is_debug_mode() {
+		return self::get_setting( 'debug' ) === 'yes';
 	}
 }
