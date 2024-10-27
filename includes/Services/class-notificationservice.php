@@ -105,24 +105,10 @@ class NotificationService {
 				'Notification handling failed.',
 				array(
 					'notification_data' => $notification_data,
-					'error'             => $e->getMessage(),
 				)
 			);
 			throw new NovaBankaIPGException( 'Notification handling failed: ' . esc_html( $e->getMessage() ) );
 		}
-	}
-
-	/**
-	 * Verify the notification signature.
-	 *
-	 * @param array  $notification_data The data from the notification.
-	 * @param string $signature The expected signature for validation.
-	 * @return bool True if the signature is valid, false otherwise.
-	 */
-	private function verify_signature( array $notification_data, string $signature ) {
-		// Generate the expected signature using a secret key and notification data.
-		$expected_signature = hash( 'sha256', json_encode( $notification_data ) . Config::get_setting( 'secret_key' ) );
-		return hash_equals( $expected_signature, $signature );
 	}
 
 	/**
