@@ -18,30 +18,37 @@ use NovaBankaIPG\Utils\SharedUtilities;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WC_Order;
 use Exception;
+use NovaBankaIPG\Utils\APIHandlerInterface;
+use NovaBankaIPG\Utils\LoggerInterface;
 
+/**
+ * Class PaymentService
+ *
+ * Handles payment processing and refund operations.
+ */
 class PaymentService {
 
 	/**
 	 * API Handler instance.
 	 *
-	 * @var APIHandler
+	 * @var APIHandlerInterface
 	 */
 	private $api_handler;
 
 	/**
 	 * Logger instance.
 	 *
-	 * @var Logger
+	 * @var LoggerInterface
 	 */
 	private $logger;
 
 	/**
 	 * Constructor for the PaymentService class.
 	 *
-	 * @param APIHandler $api_handler API handler instance.
-	 * @param Logger     $logger Logger instance.
+	 * @param APIHandlerInterface $api_handler API handler instance.
+	 * @param LoggerInterface     $logger      Logger instance.
 	 */
-	public function __construct( APIHandler $api_handler, Logger $logger ) {
+	public function __construct(APIHandlerInterface $api_handler, LoggerInterface $logger) {
 		$this->api_handler = $api_handler;
 		$this->logger      = $logger;
 	}
@@ -75,10 +82,11 @@ class PaymentService {
 			$response = $this->api_handler->send_payment_request( $payment_data );
 
 			// Handle the response from IPG.
-			if ( $response['status'] === 'SUCCESS' ) {
+			if ( 'SUCCESS' === $response['status'] ) {
 				$order->payment_complete( $response['transaction_id'] );
 				$order->add_order_note(
 					sprintf(
+						/* translators: %1$s: Transaction ID, %2$s: Amount */
 						__( 'Payment processed successfully. Transaction ID: %1$s, Amount: %2$s', 'novabanka-ipg-gateway' ),
 						$response['transaction_id'],
 						$payment_data['amount']
@@ -146,9 +154,10 @@ class PaymentService {
 			$response = $this->api_handler->send_refund_request( $refund_data );
 
 			// Handle the response from IPG.
-			if ( $response['status'] === 'SUCCESS' ) {
+			if ( 'SUCCESS' === $response['status'] ) {
 				$order->add_order_note(
 					sprintf(
+						/* translators: %1$s: Refund amount, %2$s: Refund reason */
 						__( 'Refund processed successfully. Refund Amount: %1$s, Reason: %2$s', 'novabanka-ipg-gateway' ),
 						$amount,
 						$reason
@@ -234,11 +243,15 @@ class PaymentService {
 			$this->logger->error(
 				'Payment Query response processing failed',
 				array(
-					'error'    => $e->getMessage(),
-					'response' => $response,
+					'error'    => esc_html( $e->getMessage() ),
+					'response' => wp_json_encode( $response ),
 				)
 			);
-			throw new NovaBankaIPGException( $e->getMessage(), 'QUERY_RESPONSE_ERROR', $response );
+			throw new NovaBankaIPGException( 
+				esc_html( $e->getMessage() ), 
+				'QUERY_RESPONSE_ERROR', 
+				wp_json_encode( $response )
+			);
 		}
 	}
 }

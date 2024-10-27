@@ -1,17 +1,16 @@
 <?php
 /**
- * Config Utility Class
+ * Config Class
  *
- * This class is responsible for managing the plugin configuration settings.
- * It provides methods to retrieve and update configuration options for the NovaBanka IPG plugin.
+ * Manages configuration settings for the NovaBanka IPG plugin.
+ * Provides methods for retrieving and updating plugin settings.
  *
  * @package NovaBankaIPG\Utils
  * @since 1.0.1
  */
-
 namespace NovaBankaIPG\Utils;
 
-class Config {
+class Config implements ConfigInterface {
 	/**
 	 * Retrieve a setting value by key.
 	 *

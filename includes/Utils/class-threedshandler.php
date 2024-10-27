@@ -9,8 +9,9 @@
  * @since 1.0.1
  */
 
-namespace NovaBankaIPG\Services;
+namespace NovaBankaIPG\Utils;
 
+use NovaBankaIPG\Interfaces\ThreeDSHandlerInterface;
 use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\Config;
@@ -19,7 +20,7 @@ use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WC_Order;
 use Exception;
 
-class ThreeDSHandler {
+class ThreeDSHandler implements ThreeDSHandlerInterface {
 
 	/**
 	 * API Handler instance.
@@ -38,10 +39,10 @@ class ThreeDSHandler {
 	/**
 	 * Constructor for the ThreeDSHandler class.
 	 *
-	 * @param APIHandler $api_handler API handler instance.
-	 * @param Logger     $logger Logger instance.
+	 * @param APIHandlerInterface $api_handler API handler instance.
+	 * @param LoggerInterface     $logger      Logger instance.
 	 */
-	public function __construct( APIHandler $api_handler, Logger $logger ) {
+	public function __construct(APIHandlerInterface $api_handler, LoggerInterface $logger) {
 		$this->api_handler = $api_handler;
 		$this->logger      = $logger;
 	}
@@ -68,10 +69,9 @@ class ThreeDSHandler {
 			$response = $this->api_handler->send_3ds_initiation( $auth_data );
 
 			// Handle the response from IPG.
-			if ( $response['status'] !== 'PENDING_AUTH' ) {
+			if ( 'PENDING_AUTH' !== $response['status'] ) {
 				throw NovaBankaIPGException::threeDSInitiationFailed( '3D Secure initiation failed.', $response );
-			}
-
+				}
 			$this->logger->info(
 				'3D Secure initiation successful.',
 				array(
@@ -123,7 +123,7 @@ class ThreeDSHandler {
 			$response = $this->api_handler->verify_3ds_authentication( $verification_data );
 
 			// Handle the response from IPG.
-			if ( $response['status'] === 'AUTHENTICATED' ) {
+			if ( 'AUTHENTICATED' === $response['status'] ) {
 				$this->logger->info(
 					'3D Secure authentication verified successfully.',
 					array(
@@ -266,7 +266,7 @@ class ThreeDSHandler {
 			$days_since_registration = ( time() - strtotime( $registration_date ) ) / DAY_IN_SECONDS;
 
 			$account_data['chAccAgeInd'] = $days_since_registration > 365 ? '05' : '02';
-			$account_data['chAccDate']   = date( 'Ymd', strtotime( $registration_date ) );
+			$account_data['chAccDate']   = gmdate( 'Ymd', strtotime( $registration_date ) );
 		}
 
 		return $account_data;

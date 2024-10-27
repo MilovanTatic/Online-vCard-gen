@@ -111,7 +111,7 @@ class NovaBankaIPGException extends \Exception {
 	) {
 		$error_code = self::ERROR_CODES[ $error_type ]['code'] ?? 1000;
 		parent::__construct(
-			$message ?: self::ERROR_CODES[ $error_type ]['message'],
+			$message ? $message : self::ERROR_CODES[ $error_type ]['message'],
 			$error_code,
 			$previous
 		);

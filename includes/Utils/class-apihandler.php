@@ -15,8 +15,63 @@ use NovaBankaIPG\Utils\SharedUtilities;
 use NovaBankaIPG\Utils\Config;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WP_Error;
+use NovaBankaIPG\Utils\APIHandlerInterface;
+use LoggerInterface;
+use DataHandlerInterface;
 
-class APIHandler {
+/**
+ * Class APIHandler
+ *
+ * Handles API communication with the NovaBanka IPG payment gateway.
+ * Implements APIHandlerInterface for standardized API operations.
+ *
+ * @package NovaBankaIPG\Utils
+ * @since 1.0.1
+ */
+class APIHandler implements APIHandlerInterface {
+	/**
+	 * Logger instance.
+	 *
+	 * @var LoggerInterface
+	 */
+	private $logger;
+
+	/**
+	 * Data handler instance.
+	 *
+	 * @var DataHandlerInterface
+	 */
+	private $data_handler;
+
+	/**
+	 * Constructor for the APIHandler class.
+	 *
+	 * @param string              $api_endpoint      API endpoint URL.
+	 * @param string              $terminal_id       Terminal ID.
+	 * @param string              $terminal_password Terminal password.
+	 * @param string              $secret_key        Secret key.
+	 * @param LoggerInterface     $logger           Logger instance.
+	 * @param DataHandlerInterface $data_handler     Data handler instance.
+	 * @param string              $test_mode        Test mode flag.
+	 */
+	public function __construct(
+		string $api_endpoint,
+		string $terminal_id,
+		string $terminal_password,
+		string $secret_key,
+		LoggerInterface $logger,
+		DataHandlerInterface $data_handler,
+		string $test_mode = 'yes'
+	) {
+		$this->api_endpoint = $api_endpoint;
+		$this->terminal_id = $terminal_id;
+		$this->terminal_password = $terminal_password;
+		$this->secret_key = $secret_key;
+		$this->logger = $logger;
+		$this->data_handler = $data_handler;
+		$this->test_mode = $test_mode;
+	}
+
 	/**
 	 * Send payment initialization request to the IPG API.
 	 *
@@ -94,14 +149,20 @@ class APIHandler {
 	 */
 	private function handle_response( $response ) {
 		if ( is_wp_error( $response ) ) {
-			throw new NovaBankaIPGException( 'API request failed: ' . $response->get_error_message() );
+			throw new NovaBankaIPGException( 'API request failed: ' . esc_html( $response->get_error_message() ) );
 		}
 
 		$response_code = wp_remote_retrieve_response_code( $response );
 		$response_body = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( $response_code < 200 || $response_code >= 300 ) {
-			throw new NovaBankaIPGException( 'API request returned error code ' . $response_code . ': ' . json_encode( $response_body ) );
+			throw new NovaBankaIPGException(
+				sprintf(
+					'API request returned error code %d: %s',
+					esc_html( $response_code ),
+					esc_html( wp_json_encode( $response_body ) )
+				)
+			);
 		}
 
 		return $response_body;

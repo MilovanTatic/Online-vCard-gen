@@ -12,8 +12,18 @@
 namespace NovaBankaIPG\Utils;
 
 use WC_Logger;
+use NovaBankaIPG\Interfaces\Logger as LoggerInterface;
 
-class Logger {
+/**
+ * Logger Class
+ *
+ * Handles logging operations for the NovaBanka IPG plugin.
+ * Implements LoggerInterface for standardized logging operations.
+ *
+ * @package NovaBankaIPG\Utils
+ * @since 1.0.1
+ */
+class Logger implements LoggerInterface {
 	/**
 	 * Logger instance.
 	 *
@@ -34,7 +44,7 @@ class Logger {
 	 * @param string $message The message to log.
 	 * @param array  $context Additional context for the message.
 	 */
-	public function info( $message, array $context = array() ) {
+	public function info( string $message, array $context = array() ): void {
 		if ( Config::is_debug_mode() ) {
 			$this->log( 'info', $message, $context );
 		}
@@ -46,7 +56,7 @@ class Logger {
 	 * @param string $message The message to log.
 	 * @param array  $context Additional context for the message.
 	 */
-	public function warning( $message, array $context = array() ) {
+	public function warning( string $message, array $context = array() ): void {
 		$this->log( 'warning', $message, $context );
 	}
 
@@ -56,7 +66,7 @@ class Logger {
 	 * @param string $message The message to log.
 	 * @param array  $context Additional context for the message.
 	 */
-	public function error( $message, array $context = array() ) {
+	public function error( string $message, array $context = array() ): void {
 		$this->log( 'error', $message, $context );
 	}
 
@@ -66,10 +76,32 @@ class Logger {
 	 * @param string $message The message to log.
 	 * @param array  $context Additional context for the message.
 	 */
-	public function debug( $message, array $context = array() ) {
+	public function debug( string $message, array $context = array() ): void {
 		if ( Config::is_debug_mode() ) {
 			$this->log( 'debug', $message, $context );
 		}
+	}
+
+	/**
+	 * Log critical messages.
+	 *
+	 * @param string $message The message to log.
+	 * @param array  $context Additional context for the message.
+	 */
+	public function critical( string $message, array $context = array() ): void {
+		$this->log( 'critical', $message, $context );
+	}
+
+	/**
+	 * Log payment messages.
+	 *
+	 * @param string $status The payment status.
+	 * @param string $message The message to log.
+	 * @param array  $context Additional context for the message.
+	 */
+	public function log_payment( string $status, string $message, array $context = array() ): void {
+		$context['payment_status'] = $status;
+		$this->log( 'payment', $message, $context );
 	}
 
 	/**
@@ -79,7 +111,7 @@ class Logger {
 	 * @param string $message The message to log.
 	 * @param array  $context Additional context for the message.
 	 */
-	private function log( $level, $message, array $context = array() ) {
+	private function log( string $level, string $message, array $context = array() ): void {
 		$context_string = empty( $context ) ? '' : json_encode( $context );
 		$this->logger->log( $level, sprintf( '[%s] %s %s', strtoupper( $level ), $message, $context_string ) );
 	}

@@ -26,6 +26,12 @@ use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\ThreeDSHandler;
+use NovaBankaIPG\Interfaces\APIHandlerInterface;
+use NovaBankaIPG\Interfaces\Logger as LoggerInterface;
+use NovaBankaIPG\Interfaces\DataHandlerInterface;
+use NovaBankaIPG\Interfaces\ThreeDSHandlerInterface;
+use NovaBankaIPG\Interfaces\MessageHandlerInterface;
+use NovaBankaIPG\Interfaces\SharedUtilitiesInterface;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -77,28 +83,28 @@ class NovaBankaIPG {
 	/**
 	 * API handler instance
 	 *
-	 * @var Utils\APIHandler
+	 * @var APIHandlerInterface
 	 */
 	private $api_handler;
 
 	/**
 	 * Logger instance
 	 *
-	 * @var Utils\Logger
+	 * @var LoggerInterface
 	 */
 	private $logger;
 
 	/**
 	 * Data handler instance
 	 *
-	 * @var Utils\DataHandler
+	 * @var DataHandlerInterface
 	 */
 	private $data_handler;
 
 	/**
 	 * ThreeDS handler instance
 	 *
-	 * @var Utils\ThreeDSHandler
+	 * @var ThreeDSHandlerInterface
 	 */
 	private $threeds_handler;
 
@@ -162,16 +168,12 @@ class NovaBankaIPG {
 	 * Initialize components.
 	 */
 	private function init_components() {
-		// Initialize Logger first.
-		$this->logger = new Logger( 'novabankaipg' );
-
-		// Initialize Data Handler.
+		// Initialize components using interfaces
+		$this->logger = new Logger();
 		$this->data_handler = new DataHandler();
-
-		// Get gateway settings.
+		
 		$settings = $this->get_gateway_settings();
-
-		// Initialize API Handler with settings.
+		
 		$this->api_handler = new APIHandler(
 			$settings['api_endpoint'],
 			$settings['terminal_id'],
@@ -179,17 +181,15 @@ class NovaBankaIPG {
 			$settings['secret_key'],
 			$this->logger,
 			$this->data_handler,
-			$settings['test_mode'] ?? 'yes' // Add test_mode parameter with default 'yes'.
+			$settings['test_mode'] ?? 'yes'
 		);
 
-		// Initialize 3DS Handler.
 		$this->threeds_handler = new ThreeDSHandler(
 			$this->api_handler,
-			$this->logger,
-			$this->data_handler
+			$this->logger
 		);
 
-		// Initialize Gateway last as it depends on other components.
+		// Initialize Gateway with interfaces
 		$this->gateway = new NovaBankaIPGGateway(
 			$this->api_handler,
 			$this->threeds_handler,

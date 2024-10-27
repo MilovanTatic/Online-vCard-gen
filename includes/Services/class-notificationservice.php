@@ -20,37 +20,46 @@ use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WC_Order;
 use Exception;
 
+/**
+ * Class NotificationService
+ *
+ * Handles IPG payment notifications and processes order status updates.
+ */
 class NotificationService {
 
 	/**
 	 * API Handler instance.
 	 *
-	 * @var APIHandler
+	 * @var APIHandlerInterface
 	 */
 	private $api_handler;
 
 	/**
 	 * Logger instance.
 	 *
-	 * @var Logger
+	 * @var LoggerInterface
 	 */
 	private $logger;
 
 	/**
-	 * DataHandler instance.
+	 * Data handler instance.
 	 *
-	 * @var DataHandler
+	 * @var DataHandlerInterface
 	 */
 	private $data_handler;
 
 	/**
 	 * Constructor for the NotificationService class.
 	 *
-	 * @param APIHandler  $api_handler API handler instance.
-	 * @param Logger      $logger Logger instance.
-	 * @param DataHandler $data_handler Data handler instance.
+	 * @param APIHandlerInterface   $api_handler  API handler instance.
+	 * @param LoggerInterface       $logger       Logger instance.
+	 * @param DataHandlerInterface  $data_handler Data handler instance.
 	 */
-	public function __construct( APIHandler $api_handler, Logger $logger, DataHandler $data_handler ) {
+	public function __construct(
+		APIHandlerInterface $api_handler,
+		LoggerInterface $logger,
+		DataHandlerInterface $data_handler
+	) {
 		$this->api_handler  = $api_handler;
 		$this->logger       = $logger;
 		$this->data_handler = $data_handler;
@@ -167,6 +176,7 @@ class NotificationService {
 		$order->payment_complete( $notification_data['tranid'] );
 		$order->add_order_note(
 			sprintf(
+				/* translators: %1$s: Transaction ID, %2$s: Auth Code, %3$s: Amount */
 				__( 'Payment completed successfully. Transaction ID: %1$s, Auth Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
 				$notification_data['tranid'],
 				$notification_data['auth'],
@@ -192,6 +202,7 @@ class NotificationService {
 		$order->update_status(
 			'on-hold',
 			sprintf(
+				/* translators: %1$s: Result, %2$s: Code, %3$s: Amount */
 				__( 'Payment was declined. Result: %1$s, Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
 				$notification_data['result'],
 				$notification_data['responsecode'] ?? 'N/A',
@@ -212,6 +223,7 @@ class NotificationService {
 		$order->update_status(
 			'failed',
 			sprintf(
+				/* translators: %1$s: Result, %2$s: Code, %3$s: Amount */
 				__( 'Payment failed. Result: %1$s, Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
 				$notification_data['result'],
 				$notification_data['responsecode'] ?? 'N/A',
@@ -232,6 +244,7 @@ class NotificationService {
 		$order->update_status(
 			'cancelled',
 			sprintf(
+				/* translators: %1$s: Result, %2$s: Amount */
 				__( 'Payment was cancelled. Result: %1$s, Amount: %2$s', 'novabanka-ipg-gateway' ),
 				$notification_data['result'],
 				$formatted_amount

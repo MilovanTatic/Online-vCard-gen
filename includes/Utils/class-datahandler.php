@@ -12,8 +12,18 @@
 namespace NovaBankaIPG\Utils;
 
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
+use NovaBankaIPG\Interfaces\DataHandler as DataHandlerInterface;
 
-class DataHandler {
+/**
+ * DataHandler Class
+ *
+ * Handles data formatting and validation for the NovaBanka IPG plugin.
+ * Implements DataHandlerInterface for standardized data operations.
+ *
+ * @package NovaBankaIPG\Utils
+ * @since 1.0.1
+ */
+class DataHandler implements DataHandlerInterface {
 	/**
 	 * Currency codes mapping as per IPG specs.
 	 *
@@ -46,48 +56,46 @@ class DataHandler {
 	/**
 	 * Format the payment amount to the required decimal places.
 	 *
-	 * @param float|string $amount Amount to format.
+	 * @param float $amount Amount to format.
 	 * @return string
 	 * @throws NovaBankaIPGException If the amount is not numeric or exceeds the maximum allowed value.
 	 */
-	public function format_amount( $amount ) {
+	public function format_amount( float $amount ): string {
 		// Remove any existing formatting.
-		$amount = str_replace( array( ',', ' ' ), '', (string) $amount );
+		$amount_str = str_replace( array( ',', ' ' ), '', (string) $amount );
 
-		if ( ! is_numeric( $amount ) ) {
-			throw NovaBankaIPGException::invalidRequest( 'Invalid amount format.' );
+		if ( ! is_numeric( $amount_str ) ) {
+			throw new NovaBankaIPGException( 'Invalid amount format.' );
 		}
 
-		$amount = (float) $amount;
+		$amount_float = (float) $amount_str;
 
-		// Check maximum value.
-		if ( $amount > 9999999999.99 ) {
-			throw NovaBankaIPGException::invalidRequest( 'Amount exceeds maximum allowed value.' );
+		if ( $amount_float > 9999999999.99 ) {
+			throw new NovaBankaIPGException( 'Amount exceeds maximum allowed value.' );
 		}
 
-		// Format with exactly 2 decimal places.
-		return number_format( $amount, 2, '.', '' );
+		return number_format( $amount_float, 2, '.', '' );
 	}
 
 	/**
 	 * Format a phone number to the expected format for API communication.
 	 *
-	 * @param string $phone_number The phone number to format.
+	 * @param string $phone The phone number to format.
 	 * @return string|null
 	 */
-	public static function format_phone( $phone_number ) {
-		if ( empty( $phone_number ) ) {
+	public function format_phone( string $phone ): ?string {
+		if ( empty( $phone ) ) {
 			return null;
 		}
 
 		// Remove everything except numbers and +.
-		$phone_number = preg_replace( '/[^0-9+]/', '', $phone_number );
+		$formatted = preg_replace( '/[^0-9+]/', '', $phone );
 
 		// Ensure + is only at the start.
-		$phone_number = preg_replace( '/(?!^)\+/', '', $phone_number );
+		$formatted = preg_replace( '/(?!^)\+/', '', $formatted );
 
-		// Truncate to max length defined in FIELD_LENGTHS.
-		return substr( $phone_number, 0, self::FIELD_LENGTHS['phone'] );
+		// Truncate to max length.
+		return substr( $formatted, 0, self::FIELD_LENGTHS['phone'] );
 	}
 
 	/**
@@ -108,17 +116,6 @@ class DataHandler {
 	}
 
 	/**
-	 * Validate the language code to ensure it meets expected standards.
-	 *
-	 * @param string $language_code The language code to validate.
-	 * @return bool True if the language code is valid, false otherwise.
-	 */
-	public static function validate_language_code( $language_code ) {
-		// Ensure language code is two or three letters (e.g., 'EN', 'FR', 'ESP').
-		return preg_match( '/^[a-zA-Z]{2,3}$/', $language_code ) === 1;
-	}
-
-	/**
 	 * Format the item quantity to an integer value.
 	 *
 	 * @param float $quantity The quantity to format.
@@ -136,5 +133,34 @@ class DataHandler {
 	 */
 	public function get_currency_code( $currency ) {
 		return self::CURRENCY_CODES[ $currency ] ?? null;
+	}
+
+	/**
+	 * Format an item amount by multiplying the amount by quantity and formatting the total.
+	 *
+	 * @param float $amount   The base amount to format.
+	 * @param int   $quantity The quantity to multiply by (default: 1).
+	 * @return string The formatted total amount.
+	 */
+	public function format_item_amount( float $amount, int $quantity = 1 ): string {
+		// Calculate total and format it.
+		$total = $amount * $quantity;
+		return $this->format_amount( $total );
+	}
+
+	/**
+	 * Validates a language code to ensure it matches IPG specifications.
+	 *
+	 * @param string $lang_code The language code to validate.
+	 * @return string The validated language code or 'EN' if invalid.
+	 */
+	public function validate_language_code( string $lang_code ): string {
+		// Ensure language code is two or three letters and uppercase.
+		$lang_code = strtoupper( $lang_code );
+		if ( preg_match( '/^[A-Z]{2,3}$/', $lang_code ) ) {
+			return $lang_code;
+		}
+		// Return default if invalid.
+		return 'EN';
 	}
 }

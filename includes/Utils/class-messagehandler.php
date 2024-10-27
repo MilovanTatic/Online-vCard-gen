@@ -12,6 +12,9 @@ namespace NovaBankaIPG\Utils;
 
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use NovaBankaIPG\Utils\SharedUtilities;
+use NovaBankaIPG\Interfaces\MessageHandlerInterface;
+use NovaBankaIPG\Interfaces\DataHandlerInterface;
+use NovaBankaIPG\Interfaces\LoggerInterface;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -23,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  * @package     NovaBankaIPG\Utils
  * @since       1.0.0
  */
-class MessageHandler {
+class MessageHandler implements MessageHandlerInterface {
 	/**
 	 * Secret key for message verification.
 	 *
@@ -34,14 +37,14 @@ class MessageHandler {
 	/**
 	 * Data handler instance.
 	 *
-	 * @var DataHandler
+	 * @var DataHandlerInterface
 	 */
 	private $data_handler;
 
 	/**
 	 * Logger instance.
 	 *
-	 * @var Logger
+	 * @var LoggerInterface
 	 */
 	private $logger;
 
@@ -62,18 +65,18 @@ class MessageHandler {
 	/**
 	 * Constructor
 	 *
-	 * @param string      $terminal_id       Terminal ID.
-	 * @param string      $terminal_password Terminal password.
-	 * @param string      $secret_key        Secret key for message verification.
-	 * @param DataHandler $data_handler      Data handler instance.
-	 * @param Logger      $logger            Logger instance.
+	 * @param string               $terminal_id       Terminal ID.
+	 * @param string               $terminal_password Terminal password.
+	 * @param string               $secret_key        Secret key for message verification.
+	 * @param DataHandlerInterface $data_handler      Data handler instance.
+	 * @param LoggerInterface      $logger            Logger instance.
 	 */
 	public function __construct(
 		string $terminal_id,
 		string $terminal_password,
 		string $secret_key,
-		DataHandler $data_handler,
-		Logger $logger
+		DataHandlerInterface $data_handler,
+		LoggerInterface $logger
 	) {
 		$this->terminal_id       = $terminal_id;
 		$this->terminal_password = $terminal_password;
@@ -183,7 +186,7 @@ class MessageHandler {
 			)
 		);
 
-		// Store raw values for message verification
+		// Store raw values for message verification.
 		$raw_values = array(
 			'msgName'  => 'PaymentInitRequest',
 			'version'  => '1',
@@ -202,7 +205,7 @@ class MessageHandler {
 			)
 		);
 
-		// Prepare request
+		// Prepare request.
 		$request = array(
 			'msgName'            => $raw_values['msgName'],
 			'version'            => $raw_values['version'],
