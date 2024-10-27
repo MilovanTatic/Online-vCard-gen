@@ -1,0 +1,140 @@
+<?php
+/**
+ * Notification Service Class
+ *
+ * This class is responsible for handling all payment notification-related logic.
+ * It verifies notifications from the NovaBanka IPG and processes orders accordingly.
+ *
+ * @package NovaBankaIPG\Services
+ * @since 1.0.1
+ */
+
+namespace NovaBankaIPG\Services;
+
+use NovaBankaIPG\Utils\APIHandler;
+use NovaBankaIPG\Utils\Logger;
+use NovaBankaIPG\Utils\Config;
+use NovaBankaIPG\Exceptions\NovaBankaIPGException;
+use WC_Order;
+use Exception;
+
+class NotificationService {
+	/**
+	 * API Handler instance.
+	 *
+	 * @var APIHandler
+	 */
+	private $api_handler;
+
+	/**
+	 * Logger instance.
+	 *
+	 * @var Logger
+	 */
+	private $logger;
+
+	/**
+	 * Constructor for the NotificationService class.
+	 *
+	 * @param APIHandler $api_handler API handler instance.
+	 * @param Logger     $logger Logger instance.
+	 */
+	public function __construct( APIHandler $api_handler, Logger $logger ) {
+		$this->api_handler = $api_handler;
+		$this->logger      = $logger;
+	}
+
+	/**
+	 * Handle IPG payment notification.
+	 *
+	 * @param array $notification_data The data received from the IPG notification.
+	 * @return void
+	 * @throws NovaBankaIPGException When the notification handling fails.
+	 */
+	public function handle_notification( array $notification_data ) {
+		try {
+			// Verify notification signature.
+			if ( ! $this->api_handler->verify_signature( $notification_data, $notification_data['msgVerifier'] ) ) {
+				throw new NovaBankaIPGException( 'Invalid notification signature.' );
+			}
+
+			$order_id = $notification_data['trackid'];
+			$order    = wc_get_order( $order_id );
+
+			if ( ! $order ) {
+				throw new NovaBankaIPGException( 'Order not found for ID: ' . esc_html( $order_id ) );
+			}
+
+			// Update order status based on notification.
+			if ( $notification_data['result'] === 'CAPTURED' ) {
+				$this->process_successful_payment( $order, $notification_data );
+				$this->logger->info(
+					'Payment captured successfully.',
+					array(
+						'order_id'          => $order_id,
+						'notification_data' => $notification_data,
+					)
+				);
+			} else {
+				$this->process_failed_payment( $order, $notification_data );
+				$this->logger->warning(
+					'Payment failed.',
+					array(
+						'order_id'          => $order_id,
+						'notification_data' => $notification_data,
+					)
+				);
+			}
+		} catch ( Exception $e ) {
+			$this->logger->error(
+				'Notification handling failed.',
+				array(
+					'notification_data' => $notification_data,
+					'error'             => $e->getMessage(),
+				)
+			);
+			throw new NovaBankaIPGException( 'Notification handling failed: ' . esc_html( $e->getMessage() ) );
+		}
+	}
+
+	/**
+	 * Process successful payment.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $notification_data Payment notification data.
+	 * @return void
+	 */
+	private function process_successful_payment( WC_Order $order, array $notification_data ) {
+		$order->payment_complete( $notification_data['tranid'] );
+		$order->add_order_note(
+			sprintf(
+				__( 'Payment completed successfully. Transaction ID: %1$s, Auth Code: %2$s', 'novabanka-ipg-gateway' ),
+				$notification_data['tranid'],
+				$notification_data['auth']
+			)
+		);
+		$order->update_meta_data( '_novabankaipg_auth_code', $notification_data['auth'] );
+		$order->update_meta_data( '_novabankaipg_card_type', Config::get_setting( 'card_type' ) ?? $notification_data['cardtype'] );
+		$order->update_meta_data( '_novabankaipg_card_last4', $notification_data['cardLastFourDigits'] );
+		$order->update_meta_data( '_novabankaipg_payment_reference', $notification_data['paymentReference'] ?? 'N/A' );
+		$order->save();
+	}
+
+	/**
+	 * Process failed payment.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $notification_data Payment notification data.
+	 * @return void
+	 */
+	private function process_failed_payment( WC_Order $order, array $notification_data ) {
+		$order->update_status(
+			'failed',
+			sprintf(
+				__( 'Payment failed. Result: %1$s, Code: %2$s', 'novabanka-ipg-gateway' ),
+				$notification_data['result'],
+				$notification_data['responsecode'] ?? 'N/A'
+			)
+		);
+	}
+}

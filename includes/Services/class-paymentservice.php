@@ -13,14 +13,10 @@ namespace NovaBankaIPG\Services;
 
 use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Logger;
+use NovaBankaIPG\Utils\Config;
 use WC_Order;
 use Exception;
 
-/**
- * Class PaymentService
- *
- * Handles payment-related operations including initialization, refunds, and verification with NovaBankaIPG.
- */
 class PaymentService {
 	/**
 	 * API Handler instance.
@@ -56,14 +52,18 @@ class PaymentService {
 	 */
 	public function initialize_payment( WC_Order $order ) {
 		try {
+			// Retrieve currency and language from settings if needed.
+			$currency = Config::get_setting( 'currency' ) ?? $order->get_currency();
+			$language = Config::get_setting( 'language' ) ?? 'EN';
+
 			// Prepare payment data.
 			$payment_data = array(
 				'trackid'      => $order->get_id(),
 				'amount'       => $order->get_total(),
-				'currency'     => $order->get_currency(),
+				'currency'     => $currency,
 				'response_url' => $order->get_checkout_payment_url( true ),
 				'error_url'    => $order->get_checkout_payment_url( false ),
-				'language'     => 'EN', // Default language for now.
+				'language'     => $language,
 			);
 
 			// Call the API handler to initialize the payment.
@@ -88,7 +88,50 @@ class PaymentService {
 					'error'    => $e->getMessage(),
 				)
 			);
-			throw new Exception( 'Payment initialization failed: ' . esc_html( $e->getMessage() ) );
+			throw new Exception( 'Payment initialization failed: ' . $e->getMessage() );
+		}
+	}
+
+	/**
+	 * Refund a payment for an order.
+	 *
+	 * @param WC_Order $order The WooCommerce order object.
+	 * @param float    $amount Amount to refund.
+	 * @return array Response data from the refund request.
+	 * @throws Exception When the refund process fails.
+	 */
+	public function refundPayment( WC_Order $order, float $amount ) {
+		try {
+			// Prepare refund data.
+			$refund_data = array(
+				'trackid'  => $order->get_id(),
+				'amount'   => $amount,
+				'currency' => $order->get_currency(),
+			);
+
+			// Call the API handler to process the refund.
+			$response = $this->api_handler->send_refund_request( $refund_data );
+
+			// Log successful refund.
+			$this->logger->info(
+				'Refund processed successfully.',
+				array(
+					'order_id' => $order->get_id(),
+					'response' => $response,
+				)
+			);
+
+			return $response;
+		} catch ( Exception $e ) {
+			// Log the error and throw an exception.
+			$this->logger->error(
+				'Refund process failed.',
+				array(
+					'order_id' => $order->get_id(),
+					'error'    => $e->getMessage(),
+				)
+			);
+			throw new Exception( 'Refund process failed: ' . $e->getMessage() );
 		}
 	}
 }
