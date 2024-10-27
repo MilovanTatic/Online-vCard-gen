@@ -12,6 +12,8 @@
 namespace NovaBankaIPG\Utils;
 
 use NovaBankaIPG\Interfaces\ThreeDSHandlerInterface;
+use NovaBankaIPG\Interfaces\APIHandlerInterface;
+use NovaBankaIPG\Interfaces\LoggerInterface;
 use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\Config;
@@ -20,19 +22,28 @@ use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WC_Order;
 use Exception;
 
+/**
+ * Class ThreeDSHandler
+ *
+ * Handles 3D Secure (3DS) authentication flow for NovaBanka IPG payments.
+ * Manages initiation and verification of 3DS authentication process.
+ *
+ * @package NovaBankaIPG\Utils
+ * @since 1.0.1
+ */
 class ThreeDSHandler implements ThreeDSHandlerInterface {
 
 	/**
 	 * API Handler instance.
 	 *
-	 * @var APIHandler
+	 * @var APIHandlerInterface
 	 */
 	private $api_handler;
 
 	/**
 	 * Logger instance.
 	 *
-	 * @var Logger
+	 * @var LoggerInterface
 	 */
 	private $logger;
 
@@ -42,7 +53,7 @@ class ThreeDSHandler implements ThreeDSHandlerInterface {
 	 * @param APIHandlerInterface $api_handler API handler instance.
 	 * @param LoggerInterface     $logger      Logger instance.
 	 */
-	public function __construct(APIHandlerInterface $api_handler, LoggerInterface $logger) {
+	public function __construct( APIHandlerInterface $api_handler, LoggerInterface $logger ) {
 		$this->api_handler = $api_handler;
 		$this->logger      = $logger;
 	}
@@ -71,7 +82,7 @@ class ThreeDSHandler implements ThreeDSHandlerInterface {
 			// Handle the response from IPG.
 			if ( 'PENDING_AUTH' !== $response['status'] ) {
 				throw NovaBankaIPGException::threeDSInitiationFailed( '3D Secure initiation failed.', $response );
-				}
+			}
 			$this->logger->info(
 				'3D Secure initiation successful.',
 				array(
@@ -163,7 +174,8 @@ class ThreeDSHandler implements ThreeDSHandlerInterface {
 	 * @return bool True if 3D Secure is required, false otherwise.
 	 */
 	public static function is_3ds_required( array $transaction_data ): bool {
-		return isset( $transaction_data['threeDSRequired'] ) && $transaction_data['threeDSRequired'] === true;
+		return isset( $transaction_data['threeDSRequired'] ) &&
+				true === $transaction_data['threeDSRequired'];
 	}
 
 	/**
@@ -188,7 +200,7 @@ class ThreeDSHandler implements ThreeDSHandlerInterface {
 	 * @throws NovaBankaIPGException If the response data is invalid or indicates a failure.
 	 */
 	public static function handle_3ds_response( array $response_data ): bool {
-		if ( empty( $response_data['status'] ) || $response_data['status'] !== 'AUTHENTICATED' ) {
+		if ( empty( $response_data['status'] ) || 'AUTHENTICATED' !== $response_data['status'] ) {
 			throw new NovaBankaIPGException( '3D Secure authentication failed or returned an invalid status.' );
 		}
 		return true;

@@ -10,6 +10,7 @@
 
 namespace NovaBankaIPG\Interfaces;
 
+use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 interface MessageHandlerInterface {
 	/**
 	 * Generate payment initialization request message.

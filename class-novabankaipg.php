@@ -23,6 +23,7 @@ namespace NovaBankaIPG;
 
 use NovaBankaIPG\Core\NovaBankaIPGGateway;
 use NovaBankaIPG\Utils\APIHandler;
+use NovaBankaIPG\Utils\Config;
 use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\ThreeDSHandler;
@@ -42,14 +43,24 @@ define( 'NOVABANKAIPG_VERSION', '1.0.0' );
 
 // Include necessary interfaces and classes.
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Exceptions/class-novabankaipgexception.php';
-require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-logger.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-api-handler.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-config.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-data-handler.php';
-require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-logger.php';
-require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-datahandler.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-logger.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-message-handler.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-notification-service.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-payment-service.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-shared-utilities.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Interfaces/interface-threeds-handler.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-apihandler.php';
-require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-threedshandler.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-config.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-datahandler.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-logger.php';
 require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-messagehandler.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-sharedutilities.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Utils/class-threedshandler.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Services/class-notificationservice.php';
+require_once NOVABANKAIPG_PLUGIN_DIR . 'includes/Services/class-paymentservice.php';
 
 /**
  * Main plugin class for NovaBanka IPG33 Payment Gateway
@@ -107,6 +118,13 @@ class NovaBankaIPG {
 	 * @var ThreeDSHandlerInterface
 	 */
 	private $threeds_handler;
+
+	/**
+	 * Container for services
+	 *
+	 * @var array
+	 */
+	private $container = array();
 
 	/**
 	 * Get the singleton instance of the plugin.
@@ -226,12 +244,12 @@ class NovaBankaIPG {
 			$this->logger
 		);
 
-		// Initialize Gateway with interfaces.
+		// Initialize Gateway with correct argument order.
 		$this->gateway = new NovaBankaIPGGateway(
 			$this->api_handler,
-			$this->threeds_handler,
-			$this->data_handler,
-			$this->logger
+			$this->logger,            // Changed position.
+			$this->threeds_handler,   // Changed position.
+			$this->data_handler
 		);
 	}
 
@@ -318,14 +336,12 @@ class NovaBankaIPG {
 	 * @return array
 	 */
 	private function get_gateway_settings(): array {
-		$settings = get_option( 'woocommerce_novabankaipg_settings', array() );
-
 		return array(
-			'api_endpoint'      => $settings['api_endpoint'] ?? '',
-			'terminal_id'       => $settings['terminal_id'] ?? '',
-			'terminal_password' => $settings['terminal_password'] ?? '',
-			'secret_key'        => $settings['secret_key'] ?? '',
-			'test_mode'         => $settings['test_mode'] ?? 'yes',
+			'api_endpoint'      => Utils\Config::get_setting( 'api_endpoint' ) ?? '',
+			'terminal_id'       => Utils\Config::get_setting( 'terminal_id' ) ?? '',
+			'terminal_password' => Utils\Config::get_setting( 'terminal_password' ) ?? '',
+			'secret_key'        => Utils\Config::get_setting( 'secret_key' ) ?? '',
+			'test_mode'         => Utils\Config::get_setting( 'test_mode' ) ?? 'yes',
 		);
 	}
 }

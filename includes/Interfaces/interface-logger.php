@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @since 1.0.0
  */
-interface Logger {
+interface LoggerInterface {
 	/**
 	 * Log debug message
 	 *

@@ -11,22 +11,21 @@
 
 namespace NovaBankaIPG\Services;
 
-use NovaBankaIPG\Utils\APIHandler;
-use NovaBankaIPG\Utils\Logger;
+use NovaBankaIPG\Interfaces\PaymentServiceInterface;
+use NovaBankaIPG\Interfaces\APIHandlerInterface;
+use NovaBankaIPG\Interfaces\LoggerInterface;
 use NovaBankaIPG\Utils\Config;
 use NovaBankaIPG\Utils\SharedUtilities;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WC_Order;
 use Exception;
-use NovaBankaIPG\Utils\APIHandlerInterface;
-use NovaBankaIPG\Utils\LoggerInterface;
 
 /**
  * Class PaymentService
  *
  * Handles payment processing and refund operations.
  */
-class PaymentService {
+class PaymentService implements PaymentServiceInterface {
 
 	/**
 	 * API Handler instance.

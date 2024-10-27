@@ -11,6 +11,7 @@
 namespace NovaBankaIPG\Interfaces;
 
 use WC_Order;
+use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 
 interface ThreeDSHandlerInterface {
 	/**
@@ -58,4 +59,21 @@ interface ThreeDSHandlerInterface {
 	 * @return bool True if signature is valid.
 	 */
 	public static function verify_3ds_signature( array $response_data, string $signature ): bool;
+
+	/**
+	 * Handle the response from the 3D Secure process.
+	 *
+	 * @param array $response_data The response data from the 3D Secure authentication process.
+	 * @return bool True if the 3DS authentication was successful.
+	 * @throws NovaBankaIPGException If the response data is invalid.
+	 */
+	public static function handle_3ds_response( array $response_data ): bool;
+
+	/**
+	 * Prepare 3DS data for PaymentInit request.
+	 *
+	 * @param array $order_data Order and customer data.
+	 * @return array Prepared 3DS data.
+	 */
+	public function prepare_3ds_data( array $order_data ): array;
 }

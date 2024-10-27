@@ -175,27 +175,27 @@ class APIHandler implements APIHandlerInterface {
 	/**
 	 * Verify payment notification from the IPG.
 	 *
-	 * @param array $notification_data The data received from IPG to verify.
-	 * @return bool True if notification verification is successful, false otherwise.
+	 * @param array $notification The data received from IPG to verify.
+	 * @return bool True if notification verification is successful.
 	 * @throws NovaBankaIPGException If the verification fails.
 	 */
-	public function verify_notification( array $notification_data ) {
-		$this->logger->debug( 'Verifying notification', array( 'notification' => $notification_data ) );
+	public function verify_notification( array $notification ): bool {
+		$this->logger->debug( 'Verifying notification', array( 'notification' => $notification ) );
 
 		try {
-			SharedUtilities::validate_required_fields( $notification_data, array( 'msgVerifier' ) );
+			SharedUtilities::validate_required_fields( $notification, array( 'msgVerifier' ) );
 
 			$expected_signature = SharedUtilities::generate_message_verifier(
-				...array_values( $notification_data )
+				...array_values( $notification )
 			);
 
-			$is_valid = hash_equals( $expected_signature, $notification_data['msgVerifier'] );
+			$is_valid = hash_equals( $expected_signature, $notification['msgVerifier'] );
 
 			$this->logger->debug(
 				'Notification verification result',
 				array(
 					'is_valid'     => $is_valid,
-					'notification' => $notification_data,
+					'notification' => $notification,
 				)
 			);
 
@@ -206,7 +206,7 @@ class APIHandler implements APIHandlerInterface {
 				'Notification verification failed',
 				array(
 					'error'        => $e->getMessage(),
-					'notification' => $notification_data,
+					'notification' => $notification,
 				)
 			);
 			throw $e;
@@ -347,5 +347,15 @@ class APIHandler implements APIHandlerInterface {
 		);
 
 		return $this->handle_response( $response );
+	}
+
+	/**
+	 * Send payment request
+	 *
+	 * @param array $payment_data Payment data.
+	 * @return array
+	 */
+	public function send_payment_request( array $payment_data ): array {
+		return $this->send_payment_init( $payment_data );
 	}
 }

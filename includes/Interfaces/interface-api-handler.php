@@ -8,6 +8,8 @@
 
 namespace NovaBankaIPG\Interfaces;
 
+use NovaBankaIPG\Exceptions\NovaBankaIPGException;
+
 interface APIHandlerInterface {
 	/**
 	 * Send PaymentInit request to IPG

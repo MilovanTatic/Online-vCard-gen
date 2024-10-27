@@ -178,92 +178,88 @@ class MessageHandler implements MessageHandlerInterface {
 	 * @return array Prepared request data.
 	 * @throws NovaBankaIPGException When data validation fails.
 	 */
-	private function prepare_payment_init_request( array $data ): array {
-		$this->logger->debug(
-			'Starting payment init request preparation',
-			array(
-				'raw_input_data' => $data,
-			)
-		);
+	public function prepare_payment_init_request( array $data ): array {
+		try {
+			$this->logger->debug(
+				'Starting payment init request preparation',
+				array( 'raw_input_data' => $data )
+			);
 
-		// Store raw values for message verification.
-		$raw_values = array(
-			'msgName'  => 'PaymentInitRequest',
-			'version'  => '1',
-			'id'       => $data['id'],
-			'password' => $data['password'],
-			'amt'      => $this->data_handler->format_amount( $data['amount'] ),
-			'trackid'  => (string) $data['trackid'],
-			'udf1'     => $data['udf1'] ?? '',
-			'udf5'     => $data['udf5'] ?? '',
-		);
+			// Store raw values for message verification.
+			$raw_values = array(
+				'msgName'  => 'PaymentInitRequest',
+				'version'  => '1',
+				'id'       => $data['id'],
+				'password' => $data['password'],
+				'amt'      => $this->data_handler->format_amount( $data['amount'] ),
+				'trackid'  => (string) $data['trackid'],
+				'udf1'     => $data['udf1'] ?? '',
+				'udf5'     => $data['udf5'] ?? '',
+			);
 
-		$this->logger->debug(
-			'Raw values prepared for verification',
-			array(
-				'raw_values' => $raw_values,
-			)
-		);
+			$this->logger->debug(
+				'Raw values prepared for verification',
+				array( 'raw_values' => $raw_values )
+			);
 
-		// Prepare request.
-		$request = array(
-			'msgName'            => $raw_values['msgName'],
-			'version'            => $raw_values['version'],
-			'id'                 => $raw_values['id'],
-			'password'           => $raw_values['password'],
-			'action'             => '1',
-			'currencycode'       => $this->data_handler->get_currency_code( $data['currency'] ),
-			'amt'                => $raw_values['amt'],
-			'trackid'            => $raw_values['trackid'],
-			'responseURL'        => $data['responseURL'],
-			'errorURL'           => $data['errorURL'],
-			'langid'             => $data['langid'],
-			'notificationFormat' => 'json',
-			'payinst'            => 'VPAS',
-			'recurAction'        => '',
-		);
+			// Prepare base request.
+			$request = array(
+				'msgName'            => $raw_values['msgName'],
+				'version'            => $raw_values['version'],
+				'id'                 => $raw_values['id'],
+				'password'           => $raw_values['password'],
+				'action'             => '1',
+				'currencycode'       => $this->data_handler->get_currency_code( $data['currency'] ),
+				'amt'                => $raw_values['amt'],
+				'trackid'            => $raw_values['trackid'],
+				'responseURL'        => $data['responseURL'],
+				'errorURL'           => $data['errorURL'],
+				'langid'             => $data['langid'],
+				'notificationFormat' => 'json',
+				'payinst'            => 'VPAS',
+				'recurAction'        => '',
+			);
 
-		$this->logger->debug(
-			'Base request prepared',
-			array(
-				'request' => $request,
-			)
-		);
+			$this->logger->debug(
+				'Base request prepared',
+				array( 'request' => $request )
+			);
 
-		// Add optional fields.
-		if ( ! empty( $data['email'] ) ) {
-			$request['buyerEmailAddress'] = $data['email'];
-		}
-
-		// Add UDF fields.
-		foreach ( array( 'udf1', 'udf2', 'udf3' ) as $udf ) {
-			if ( ! empty( $data[ $udf ] ) ) {
-				$request[ $udf ] = $data[ $udf ];
+			// Add optional fields.
+			if ( ! empty( $data['email'] ) ) {
+				$request['buyerEmailAddress'] = $data['email'];
 			}
+
+			// Add UDF fields.
+			foreach ( array( 'udf1', 'udf2', 'udf3' ) as $udf ) {
+				if ( ! empty( $data[ $udf ] ) ) {
+					$request[ $udf ] = $data[ $udf ];
+				}
+			}
+
+			// Generate message verifier using raw values.
+			$verifier_fields = array(
+				$raw_values['msgName'],
+				$raw_values['version'],
+				$raw_values['id'],
+				$raw_values['password'],
+				$raw_values['amt'],
+				$raw_values['trackid'],
+				$raw_values['udf1'],
+				$this->secret_key,
+				$raw_values['udf5'],
+			);
+
+			$request['msgVerifier'] = SharedUtilities::generate_message_verifier( ...$verifier_fields );
+
+			$this->logger->debug(
+				'Final request prepared',
+				array( 'final_request' => $request )
+			);
+
+			return $request;
+		} catch ( Exception $e ) {
+			throw new NovaBankaIPGException( 'Failed to prepare payment request: ' . esc_html( $e->getMessage() ) );
 		}
-
-		// Generate message verifier using raw values.
-		$verifier_fields = array(
-			$raw_values['msgName'],
-			$raw_values['version'],
-			$raw_values['id'],
-			$raw_values['password'],
-			$raw_values['amt'],
-			$raw_values['trackid'],
-			$raw_values['udf1'],
-			$this->secret_key,
-			$raw_values['udf5'],
-		);
-
-		$request['msgVerifier'] = SharedUtilities::generate_message_verifier( ...$verifier_fields );
-
-		$this->logger->debug(
-			'Final request prepared',
-			array(
-				'final_request' => $request,
-			)
-		);
-
-		return $request;
 	}
 }

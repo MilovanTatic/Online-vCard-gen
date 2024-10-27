@@ -11,11 +11,12 @@
 
 namespace NovaBankaIPG\Services;
 
-use NovaBankaIPG\Utils\APIHandler;
-use NovaBankaIPG\Utils\Logger;
+use NovaBankaIPG\Interfaces\APIHandlerInterface;
+use NovaBankaIPG\Interfaces\LoggerInterface;
+use NovaBankaIPG\Interfaces\DataHandlerInterface;
+use NovaBankaIPG\Interfaces\NotificationServiceInterface;
 use NovaBankaIPG\Utils\SharedUtilities;
 use NovaBankaIPG\Utils\Config;
-use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WC_Order;
 use Exception;
@@ -25,7 +26,7 @@ use Exception;
  *
  * Handles IPG payment notifications and processes order status updates.
  */
-class NotificationService {
+class NotificationService implements NotificationServiceInterface {
 
 	/**
 	 * API Handler instance.
@@ -51,9 +52,9 @@ class NotificationService {
 	/**
 	 * Constructor for the NotificationService class.
 	 *
-	 * @param APIHandlerInterface   $api_handler  API handler instance.
-	 * @param LoggerInterface       $logger       Logger instance.
-	 * @param DataHandlerInterface  $data_handler Data handler instance.
+	 * @param APIHandlerInterface  $api_handler  API handler instance.
+	 * @param LoggerInterface      $logger       Logger instance.
+	 * @param DataHandlerInterface $data_handler Data handler instance.
 	 */
 	public function __construct(
 		APIHandlerInterface $api_handler,
@@ -171,7 +172,7 @@ class NotificationService {
 	 * @param array    $notification_data Payment notification data.
 	 * @return void
 	 */
-	private function process_successful_payment( WC_Order $order, array $notification_data ): void {
+	public function process_successful_payment( WC_Order $order, array $notification_data ): void {
 		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
 		$order->payment_complete( $notification_data['tranid'] );
 		$order->add_order_note(
@@ -197,7 +198,7 @@ class NotificationService {
 	 * @param array    $notification_data Payment notification data.
 	 * @return void
 	 */
-	private function process_declined_payment( WC_Order $order, array $notification_data ): void {
+	public function process_declined_payment( WC_Order $order, array $notification_data ): void {
 		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
 		$order->update_status(
 			'on-hold',
@@ -218,7 +219,7 @@ class NotificationService {
 	 * @param array    $notification_data Payment notification data.
 	 * @return void
 	 */
-	private function process_failed_payment( WC_Order $order, array $notification_data ): void {
+	public function process_failed_payment( WC_Order $order, array $notification_data ): void {
 		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
 		$order->update_status(
 			'failed',
@@ -239,7 +240,7 @@ class NotificationService {
 	 * @param array    $notification_data Payment notification data.
 	 * @return void
 	 */
-	private function process_cancelled_payment( WC_Order $order, array $notification_data ): void {
+	public function process_cancelled_payment( WC_Order $order, array $notification_data ): void {
 		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
 		$order->update_status(
 			'cancelled',

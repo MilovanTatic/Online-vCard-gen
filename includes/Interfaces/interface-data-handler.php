@@ -7,7 +7,12 @@
 
 namespace NovaBankaIPG\Interfaces;
 
-interface DataHandler {
+/**
+ * DataHandlerInterface
+ *
+ * @package NovaBankaIPG\Interfaces
+ */
+interface DataHandlerInterface {
 	/**
 	 * Format amount for IPG.
 	 *
@@ -27,8 +32,8 @@ interface DataHandler {
 	/**
 	 * Format item amount.
 	 *
-	 * @param float $amount Amount to format.
-	 * @param int   $quantity Quantity to format.
+	 * @param float $amount   The base amount to format.
+	 * @param int   $quantity The quantity to multiply by.
 	 * @return string Formatted amount.
 	 */
 	public function format_item_amount( float $amount, int $quantity = 1 ): string;
@@ -40,4 +45,12 @@ interface DataHandler {
 	 * @return string Validated language code.
 	 */
 	public function validate_language_code( string $lang_code ): string;
+
+	/**
+	 * Get currency code based on the currency name.
+	 *
+	 * @param string $currency Currency name (e.g., 'EUR', 'USD').
+	 * @return string|null Currency code or null if not found.
+	 */
+	public function get_currency_code( string $currency ): ?string;
 }

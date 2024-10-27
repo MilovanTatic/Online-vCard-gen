@@ -11,8 +11,7 @@
 
 namespace NovaBankaIPG\Utils;
 
-use WC_Logger;
-use NovaBankaIPG\Interfaces\Logger as LoggerInterface;
+use NovaBankaIPG\Interfaces\LoggerInterface;
 
 /**
  * Logger Class
@@ -27,9 +26,9 @@ class Logger implements LoggerInterface {
 	/**
 	 * Logger instance.
 	 *
-	 * @var WC_Logger
+	 * @var \WC_Logger|null
 	 */
-	private $logger;
+	private $logger = null;
 
 	/**
 	 * Source identifier for logs.
@@ -42,7 +41,28 @@ class Logger implements LoggerInterface {
 	 * Constructor for the Logger utility class.
 	 */
 	public function __construct() {
-		$this->logger = new WC_Logger();
+		add_action( 'woocommerce_init', array( $this, 'init_logger' ) );
+	}
+
+	/**
+	 * Initialize WC_Logger instance.
+	 */
+	public function init_logger(): void {
+		if ( class_exists( 'WC_Logger' ) && is_null( $this->logger ) ) {
+			$this->logger = wc_get_logger();
+		}
+	}
+
+	/**
+	 * Get logger instance.
+	 *
+	 * @return \WC_Logger|null
+	 */
+	private function get_logger() {
+		if ( is_null( $this->logger ) ) {
+			$this->init_logger();
+		}
+		return $this->logger;
 	}
 
 	/**
@@ -52,7 +72,7 @@ class Logger implements LoggerInterface {
 	 * @param array  $context Additional context for the message.
 	 */
 	public function info( string $message, array $context = array() ): void {
-		if ( Config::is_debug_mode() ) {
+		if ( Config::is_debug_mode() && $this->get_logger() ) {
 			$this->log( 'info', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
 		}
 	}
@@ -64,7 +84,9 @@ class Logger implements LoggerInterface {
 	 * @param array  $context Additional context for the message.
 	 */
 	public function warning( string $message, array $context = array() ): void {
-		$this->log( 'warning', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
+		if ( $this->get_logger() ) {
+			$this->log( 'warning', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
+		}
 	}
 
 	/**
@@ -74,7 +96,9 @@ class Logger implements LoggerInterface {
 	 * @param array  $context Additional context for the message.
 	 */
 	public function error( string $message, array $context = array() ): void {
-		$this->log( 'error', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
+		if ( $this->get_logger() ) {
+			$this->log( 'error', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
+		}
 	}
 
 	/**
@@ -84,7 +108,7 @@ class Logger implements LoggerInterface {
 	 * @param array  $context Additional context for the message.
 	 */
 	public function debug( string $message, array $context = array() ): void {
-		if ( Config::is_debug_mode() ) {
+		if ( Config::is_debug_mode() && $this->get_logger() ) {
 			$this->log( 'debug', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
 		}
 	}
@@ -96,29 +120,37 @@ class Logger implements LoggerInterface {
 	 * @param array  $context Additional context for the message.
 	 */
 	public function critical( string $message, array $context = array() ): void {
-		$this->log( 'critical', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
+		if ( $this->get_logger() ) {
+			$this->log( 'critical', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
+		}
 	}
 
 	/**
 	 * Log payment messages.
 	 *
-	 * @param string $status The payment status.
+	 * @param string $status  The payment status.
 	 * @param string $message The message to log.
 	 * @param array  $context Additional context for the message.
 	 */
 	public function log_payment( string $status, string $message, array $context = array() ): void {
-		$context['payment_status'] = $status;
-		$this->log( 'payment', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
+		if ( $this->get_logger() ) {
+			$context['payment_status'] = $status;
+			$this->log( 'payment', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
+		}
 	}
 
 	/**
 	 * Generic log method for handling all log levels.
 	 *
-	 * @param string $level The level of the log (info, warning, error, debug).
+	 * @param string $level   The level of the log (info, warning, error, debug).
 	 * @param string $message The message to log.
 	 * @param array  $context Additional context for the message.
 	 */
 	private function log( string $level, string $message, array $context = array() ): void {
+		if ( ! $this->get_logger() ) {
+			return;
+		}
+
 		$log_entry = array(
 			'timestamp' => current_time( 'c' ),
 			'level'     => strtoupper( $level ),
@@ -126,9 +158,10 @@ class Logger implements LoggerInterface {
 			'context'   => $context,
 		);
 
-		$this->logger->add(
-			$this->source,
-			wp_json_encode( $log_entry, JSON_PRETTY_PRINT )
+		$this->get_logger()->log(
+			$level,
+			wp_json_encode( $log_entry, JSON_PRETTY_PRINT ),
+			array( 'source' => $this->source )
 		);
 	}
 

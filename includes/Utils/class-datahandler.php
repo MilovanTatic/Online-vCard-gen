@@ -12,7 +12,7 @@
 namespace NovaBankaIPG\Utils;
 
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
-use NovaBankaIPG\Interfaces\DataHandler as DataHandlerInterface;
+use NovaBankaIPG\Interfaces\DataHandlerInterface;
 
 /**
  * DataHandler Class
@@ -131,7 +131,7 @@ class DataHandler implements DataHandlerInterface {
 	 * @param string $currency Currency name (e.g., 'EUR', 'USD').
 	 * @return string|null Currency code or null if not found.
 	 */
-	public function get_currency_code( $currency ) {
+	public function get_currency_code( string $currency ): ?string {
 		return self::CURRENCY_CODES[ $currency ] ?? null;
 	}
 

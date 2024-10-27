@@ -13,26 +13,52 @@ namespace NovaBankaIPG\Core;
 
 use NovaBankaIPG\Services\PaymentService;
 use NovaBankaIPG\Services\NotificationService;
-use NovaBankaIPG\Utils\APIHandler;
-use NovaBankaIPG\Utils\Logger;
+use NovaBankaIPG\Interfaces\APIHandlerInterface;
+use NovaBankaIPG\Interfaces\LoggerInterface;
+use NovaBankaIPG\Interfaces\DataHandlerInterface;
+use NovaBankaIPG\Interfaces\ThreeDSHandlerInterface;
 use NovaBankaIPG\Utils\Config;
 use WC_Payment_Gateway;
 use Exception;
 
+/**
+ * NovaBanka IPG Gateway Class
+ *
+ * This class extends WooCommerce's payment gateway functionality to integrate
+ * with NovaBanka's Internet Payment Gateway (IPG). It handles payment processing,
+ * gateway settings, and transaction management.
+ *
+ * @package NovaBankaIPG\Core
+ * @since 1.0.1
+ */
 class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	/**
 	 * API Handler instance.
 	 *
-	 * @var APIHandler
+	 * @var APIHandlerInterface
 	 */
 	protected $api_handler;
 
 	/**
 	 * Logger instance.
 	 *
-	 * @var Logger
+	 * @var LoggerInterface
 	 */
 	protected $logger;
+
+	/**
+	 * Data Handler instance.
+	 *
+	 * @var DataHandlerInterface
+	 */
+	protected $data_handler;
+
+	/**
+	 * ThreeDS Handler instance.
+	 *
+	 * @var ThreeDSHandlerInterface
+	 */
+	protected $threeds_handler;
 
 	/**
 	 * Payment Service instance.
@@ -51,31 +77,46 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	/**
 	 * Constructor for the gateway.
 	 *
-	 * @param APIHandler|null $api_handler The API handler instance.
-	 * @param Logger|null     $logger The logger instance.
+	 * @param APIHandlerInterface|null     $api_handler     The API handler instance.
+	 * @param LoggerInterface|null         $logger          The logger instance.
+	 * @param ThreeDSHandlerInterface|null $threeds_handler The ThreeDS handler instance.
+	 * @param DataHandlerInterface|null    $data_handler    The data handler instance.
 	 */
-	public function __construct( APIHandler $api_handler = null, Logger $logger = null ) {
+	public function __construct(
+		?APIHandlerInterface $api_handler = null,
+		?LoggerInterface $logger = null,
+		?ThreeDSHandlerInterface $threeds_handler = null,
+		?DataHandlerInterface $data_handler = null
+	) {
 		$this->id                 = 'novabankaipg';
 		$this->has_fields         = true;
 		$this->method_title       = __( 'NovaBanka IPG', 'novabanka-ipg-gateway' );
 		$this->method_description = __( 'Accept payments through NovaBanka IPG gateway with 3D Secure.', 'novabanka-ipg-gateway' );
 
-		// Initialize dependencies.
-		$this->api_handler = $api_handler ?? new APIHandler(); // Use provided API handler or create a new one.
-		$this->logger      = $logger ?? new Logger(); // Use provided Logger or create a new one.
+		// Initialize dependencies if provided.
+		if ( $api_handler && $logger && $threeds_handler && $data_handler ) {
+			$this->api_handler     = $api_handler;
+			$this->logger          = $logger;
+			$this->threeds_handler = $threeds_handler;
+			$this->data_handler    = $data_handler;
 
-		// Initialize PaymentService and NotificationService.
-		$this->payment_service      = new PaymentService( $this->api_handler, $this->logger );
-		$this->notification_service = new NotificationService( $this->api_handler, $this->logger );
+			// Initialize services.
+			$this->payment_service      = new PaymentService( $this->api_handler, $this->logger );
+			$this->notification_service = new NotificationService(
+				$this->api_handler,
+				$this->logger,
+				$this->data_handler
+			);
+		}
 
-		// Load settings using Config utility.
-		$this->init_form_fields(); // Initialize the settings form fields for the payment gateway.
-		$this->init_settings(); // Load current settings from WooCommerce.
+		// Load settings.
+		$this->init_form_fields();
+		$this->init_settings();
 
-		// Add hooks for receipt and IPN notifications.
-		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) ); // Hook for saving settings in the admin panel.
-		add_action( 'woocommerce_receipt_' . $this->id, array( $this, 'receipt_page' ) ); // Hook for displaying the receipt page after checkout.
-		add_action( 'woocommerce_api_wc_' . $this->id, array( $this, 'handle_notification_callback' ) ); // Hook for handling IPN notifications from NovaBanka IPG.
+		// Add hooks.
+		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
+		add_action( 'woocommerce_receipt_' . $this->id, array( $this, 'receipt_page' ) );
+		add_action( 'woocommerce_api_wc_' . $this->id, array( $this, 'handle_notification_callback' ) );
 	}
 
 	/**
@@ -119,7 +160,7 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	 *
 	 * @param int $order_id Order ID.
 	 * @return array|
-	 * @throws Exception When payment processing fails.
+	 * @throws NovaBankaIPG\Exceptions\NovaBankaIPGException When payment processing fails.
 	 *
 	 * This method is called when a customer places an order and chooses this payment gateway.
 	 */
@@ -148,7 +189,7 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 				'result'   => 'success',
 				'redirect' => $response['browserRedirectionURL'], // Redirect customer to the payment gateway.
 			);
-		} catch ( Exception $e ) {
+		} catch ( NovaBankaIPGException $e ) {
 			// Log the error and notify the customer.
 			$this->logger->error(
 				'Payment process failed.',
@@ -181,10 +222,17 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	 *
 	 * This method is called when the IPG sends a notification regarding payment status.
 	 * It verifies the notification and updates the order accordingly.
+	 *
+	 * @throws NovaBankaIPG\Exceptions\NovaBankaIPGException If security verification fails or notification processing fails.
 	 */
 	public function handle_notification_callback() {
 		try {
-			$notification_data = $_POST; // Assuming IPG sends POST data.
+			// Verify nonce for security.
+			if ( ! check_ajax_referer( 'novabanka_ipg_notification', 'security', false ) ) {
+				throw NovaBankaIPGException::invalidSignature( 'Invalid security token.' );
+			}
+
+			$notification_data = wp_unslash( $_POST ); // Assuming IPG sends POST data.
 
 			// Log if in test mode.
 			if ( Config::is_test_mode() ) {
@@ -198,7 +246,7 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 			http_response_code( 200 );
 			$this->logger->info( 'Notification callback handled successfully.', array( 'notification_data' => $notification_data ) );
 			echo 'OK';
-		} catch ( Exception $e ) {
+		} catch ( NovaBankaIPGException $e ) {
 			// Log the error and respond with failure.
 			$this->logger->error(
 				'Notification callback handling failed.',
