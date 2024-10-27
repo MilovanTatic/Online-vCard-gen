@@ -48,7 +48,10 @@ class PaymentService {
 	 * @param APIHandlerInterface $api_handler API handler instance.
 	 * @param LoggerInterface     $logger      Logger instance.
 	 */
-	public function __construct(APIHandlerInterface $api_handler, LoggerInterface $logger) {
+	public function __construct(
+		APIHandlerInterface $api_handler,
+		LoggerInterface $logger
+	) {
 		$this->api_handler = $api_handler;
 		$this->logger      = $logger;
 	}
@@ -247,9 +250,9 @@ class PaymentService {
 					'response' => wp_json_encode( $response ),
 				)
 			);
-			throw new NovaBankaIPGException( 
-				esc_html( $e->getMessage() ), 
-				'QUERY_RESPONSE_ERROR', 
+			throw new NovaBankaIPGException(
+				esc_html( $e->getMessage() ),
+				'QUERY_RESPONSE_ERROR',
 				wp_json_encode( $response )
 			);
 		}

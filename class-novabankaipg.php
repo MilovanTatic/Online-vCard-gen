@@ -126,7 +126,44 @@ class NovaBankaIPG {
 	 * Initializes hooks for the plugin.
 	 */
 	private function __construct() {
+		$this->init_container();
 		$this->init_hooks();
+	}
+
+	/**
+	 * Initialize container for services.
+	 */
+	private function init_container() {
+		// Initialize services with proper dependency injection.
+		$this->container['logger']       = new Logger();
+		$this->container['data_handler'] = new DataHandler();
+
+		$settings = $this->get_gateway_settings();
+
+		$this->container['api_handler'] = new APIHandler(
+			$settings['api_endpoint'],
+			$settings['terminal_id'],
+			$settings['terminal_password'],
+			$settings['secret_key'],
+			$this->container['logger'],
+			$this->container['data_handler'],
+			$settings['test_mode'] ?? 'yes'
+		);
+
+		$this->container['threeds_handler'] = new ThreeDSHandler(
+			$this->container['api_handler'],
+			$this->container['logger']
+		);
+	}
+
+	/**
+	 * Get service from container.
+	 *
+	 * @param string $service Service name.
+	 * @return mixed|null Service instance or null if not found.
+	 */
+	private function get_service( string $service ) {
+		return $this->container[ $service ] ?? null;
 	}
 
 	/**
@@ -168,12 +205,12 @@ class NovaBankaIPG {
 	 * Initialize components.
 	 */
 	private function init_components() {
-		// Initialize components using interfaces
-		$this->logger = new Logger();
+		// Initialize components using interfaces.
+		$this->logger       = new Logger();
 		$this->data_handler = new DataHandler();
-		
+
 		$settings = $this->get_gateway_settings();
-		
+
 		$this->api_handler = new APIHandler(
 			$settings['api_endpoint'],
 			$settings['terminal_id'],
@@ -189,7 +226,7 @@ class NovaBankaIPG {
 			$this->logger
 		);
 
-		// Initialize Gateway with interfaces
+		// Initialize Gateway with interfaces.
 		$this->gateway = new NovaBankaIPGGateway(
 			$this->api_handler,
 			$this->threeds_handler,

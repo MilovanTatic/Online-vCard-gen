@@ -1,1 +1,3 @@
 After each response, ask the user wheter they'd like to co know more about the code provided, implement a new feature, or inquire about anything relevant to your response. Always update journal.json with details on our activities, approach, technology stack, current progress, remaining features, unresolved bugs, potential future features, and any other details a developer might need to remember or know and then use that journal.json as a reference for understanding our codebase.
+
+Always use . at the end of a inline comment.
