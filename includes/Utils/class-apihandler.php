@@ -11,6 +11,7 @@
 
 namespace NovaBankaIPG\Utils;
 
+use NovaBankaIPG\Utils\SharedUtilities;
 use NovaBankaIPG\Utils\Config;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WP_Error;
@@ -24,11 +25,13 @@ class APIHandler {
 	 * @throws NovaBankaIPGException If the request fails or returns an error.
 	 */
 	public function send_payment_init( array $payment_data ) {
-		$endpoint = Config::is_test_mode() ? Config::get_setting( 'test_api_url' ) : Config::get_setting( 'live_api_url' );
-		$url      = rtrim( $endpoint, '/' ) . '/payment-init';
+		// Validate required fields.
+		SharedUtilities::validate_required_fields( $payment_data, array( 'amount', 'currency', 'order_id' ) );
+
+		$endpoint = SharedUtilities::get_api_endpoint( '/payment-init' );
 
 		$response = wp_remote_post(
-			$url,
+			$endpoint,
 			array(
 				'body'    => json_encode( $payment_data ),
 				'headers' => array(
@@ -48,11 +51,13 @@ class APIHandler {
 	 * @throws NovaBankaIPGException If the request fails or returns an error.
 	 */
 	public function process_refund( array $refund_data ) {
-		$endpoint = Config::is_test_mode() ? Config::get_setting( 'test_api_url' ) : Config::get_setting( 'live_api_url' );
-		$url      = rtrim( $endpoint, '/' ) . '/refund';
+		// Validate required fields.
+		SharedUtilities::validate_required_fields( $refund_data, array( 'amount', 'order_id' ) );
+
+		$endpoint = SharedUtilities::get_api_endpoint( '/refund' );
 
 		$response = wp_remote_post(
-			$url,
+			$endpoint,
 			array(
 				'body'    => json_encode( $refund_data ),
 				'headers' => array(
@@ -72,8 +77,11 @@ class APIHandler {
 	 * @throws NovaBankaIPGException If the verification fails.
 	 */
 	public function verify_notification( array $notification_data ) {
-		// Verification logic, for example using a shared secret to validate the notification.
-		$expected_signature = hash( 'sha256', json_encode( $notification_data ) . Config::get_setting( 'secret_key' ) );
+		// Validate required fields.
+		SharedUtilities::validate_required_fields( $notification_data, array( 'msgVerifier' ) );
+
+		// Generate the expected signature.
+		$expected_signature = SharedUtilities::generate_message_verifier( ...array_values( $notification_data ) );
 		return hash_equals( $expected_signature, $notification_data['msgVerifier'] );
 	}
 

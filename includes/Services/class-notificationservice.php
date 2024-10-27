@@ -2,8 +2,8 @@
 /**
  * NotificationService Class
  *
- * This class is responsible for handling all payment notification-related logic.
- * It verifies notifications from the NovaBanka IPG and processes orders accordingly.
+ * This class is responsible for managing notification-related logic for NovaBanka IPG.
+ * It handles notifications received from IPG and processes them accordingly.
  *
  * @package NovaBankaIPG\Services
  * @since 1.0.1
@@ -13,12 +13,15 @@ namespace NovaBankaIPG\Services;
 
 use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Logger;
+use NovaBankaIPG\Utils\SharedUtilities;
 use NovaBankaIPG\Utils\Config;
+use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WC_Order;
 use Exception;
 
 class NotificationService {
+
 	/**
 	 * API Handler instance.
 	 *
@@ -34,76 +37,117 @@ class NotificationService {
 	private $logger;
 
 	/**
+	 * DataHandler instance.
+	 *
+	 * @var DataHandler
+	 */
+	private $data_handler;
+
+	/**
 	 * Constructor for the NotificationService class.
 	 *
-	 * @param APIHandler $api_handler API handler instance.
-	 * @param Logger     $logger Logger instance.
+	 * @param APIHandler  $api_handler API handler instance.
+	 * @param Logger      $logger Logger instance.
+	 * @param DataHandler $data_handler Data handler instance.
 	 */
-	public function __construct( APIHandler $api_handler, Logger $logger ) {
-		$this->api_handler = $api_handler;
-		$this->logger      = $logger;
+	public function __construct( APIHandler $api_handler, Logger $logger, DataHandler $data_handler ) {
+		$this->api_handler  = $api_handler;
+		$this->logger       = $logger;
+		$this->data_handler = $data_handler;
 	}
 
 	/**
-	 * Handle IPG payment notification.
+	 * Handle incoming notification from IPG.
 	 *
-	 * @param array $notification_data The data received from the IPG notification.
+	 * @param array $notification_data The notification data received from IPG.
 	 * @return void
 	 * @throws NovaBankaIPGException When the notification handling fails.
 	 */
-	public function handle_notification( array $notification_data ) {
+	public function handle_notification( array $notification_data ): void {
 		try {
-			// Verify notification signature.
-			if ( ! $this->verify_signature( $notification_data, $notification_data['msgVerifier'] ) ) {
-				throw new NovaBankaIPGException( 'Invalid notification signature.' );
+			// Validate required fields.
+			SharedUtilities::validate_required_fields(
+				$notification_data,
+				array(
+					'msgName',
+					'version',
+					'paymentid',
+					'status',
+					'result',
+					'amt',
+					'msgVerifier',
+				)
+			);
+
+			// Verify message signature.
+			$verifier_fields     = array(
+				$notification_data['msgName'],
+				$notification_data['version'],
+				$notification_data['paymentid'],
+				$notification_data['amt'],
+				$notification_data['status'],
+				$notification_data['result'],
+			);
+			$calculated_verifier = SharedUtilities::generate_message_verifier( ...$verifier_fields );
+
+			if ( ! hash_equals( $calculated_verifier, $notification_data['msgVerifier'] ) ) {
+				throw new NovaBankaIPGException( 'Invalid notification message signature.' );
 			}
 
-			$order_id = $notification_data['trackid'];
+			// Log the notification if in debug mode.
+			if ( Config::get_setting( 'debug', false ) ) {
+				$this->logger->debug( 'Notification received', array( 'notification_data' => $notification_data ) );
+			}
+
+			$order_id = $notification_data['paymentid'];
 			$order    = wc_get_order( $order_id );
 
 			if ( ! $order ) {
 				throw new NovaBankaIPGException( 'Order not found for ID: ' . esc_html( $order_id ) );
 			}
 
-			// Process the notification based on the result.
-			switch ( $notification_data['result'] ) {
-				case 'CAPTURED':
+			// Handle different notification statuses.
+			switch ( $notification_data['status'] ) {
+				case 'SUCCESS':
 					$this->process_successful_payment( $order, $notification_data );
-					$this->logger->info(
-						'Payment captured successfully.',
-						array(
-							'order_id'          => $order_id,
-							'notification_data' => $notification_data,
-						)
-					);
-					break;
-				case 'DECLINED':
-					$this->process_declined_payment( $order, $notification_data );
-					$this->logger->warning(
-						'Payment was declined.',
-						array(
-							'order_id'          => $order_id,
-							'notification_data' => $notification_data,
-						)
-					);
+					$this->logger->info( 'Payment notification processed successfully.', array( 'payment_id' => $notification_data['paymentid'] ) );
 					break;
 				case 'FAILED':
 					$this->process_failed_payment( $order, $notification_data );
-					$this->logger->error(
-						'Payment failed.',
-						array(
-							'order_id'          => $order_id,
-							'notification_data' => $notification_data,
-						)
-					);
+					$this->logger->error( 'Payment notification indicates a failure.', array( 'payment_id' => $notification_data['paymentid'] ) );
+					break;
+				case 'DECLINED':
+					$this->process_declined_payment( $order, $notification_data );
+					$this->logger->warning( 'Payment was declined.', array( 'payment_id' => $notification_data['paymentid'] ) );
+					break;
+				case 'CANCELLED':
+					$this->process_cancelled_payment( $order, $notification_data );
+					$this->logger->info( 'Payment was cancelled by the user.', array( 'payment_id' => $notification_data['paymentid'] ) );
 					break;
 				default:
-					throw new NovaBankaIPGException( 'Unknown payment result: ' . esc_html( $notification_data['result'] ) );
+					$this->logger->warning(
+						'Unhandled payment status received in notification.',
+						array(
+							'payment_id' => $notification_data['paymentid'],
+							'status'     => $notification_data['status'],
+						)
+					);
+					throw new NovaBankaIPGException( 'Unhandled payment status received in notification.' );
 			}
-		} catch ( Exception $e ) {
+		} catch ( NovaBankaIPGException $e ) {
 			$this->logger->error(
 				'Notification handling failed.',
 				array(
+					'error'             => $e->getMessage(),
+					'notification_data' => $notification_data,
+				)
+			);
+			throw $e;
+		} catch ( Exception $e ) {
+			$this->logger->error(
+				'Notification handling failed due to an unexpected error.',
+				array(
+					'error'             => $e->getMessage(),
 					'notification_data' => $notification_data,
 				)
 			);
@@ -118,13 +162,15 @@ class NotificationService {
 	 * @param array    $notification_data Payment notification data.
 	 * @return void
 	 */
-	private function process_successful_payment( WC_Order $order, array $notification_data ) {
+	private function process_successful_payment( WC_Order $order, array $notification_data ): void {
+		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
 		$order->payment_complete( $notification_data['tranid'] );
 		$order->add_order_note(
 			sprintf(
-				__( 'Payment completed successfully. Transaction ID: %1$s, Auth Code: %2$s', 'novabanka-ipg-gateway' ),
+				__( 'Payment completed successfully. Transaction ID: %1$s, Auth Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
 				$notification_data['tranid'],
-				$notification_data['auth']
+				$notification_data['auth'],
+				$formatted_amount
 			)
 		);
 		$order->update_meta_data( '_novabankaipg_auth_code', $notification_data['auth'] );
@@ -141,13 +187,15 @@ class NotificationService {
 	 * @param array    $notification_data Payment notification data.
 	 * @return void
 	 */
-	private function process_declined_payment( WC_Order $order, array $notification_data ) {
+	private function process_declined_payment( WC_Order $order, array $notification_data ): void {
+		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
 		$order->update_status(
 			'on-hold',
 			sprintf(
-				__( 'Payment was declined. Result: %1$s, Code: %2$s', 'novabanka-ipg-gateway' ),
+				__( 'Payment was declined. Result: %1$s, Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
 				$notification_data['result'],
-				$notification_data['responsecode'] ?? 'N/A'
+				$notification_data['responsecode'] ?? 'N/A',
+				$formatted_amount
 			)
 		);
 	}
@@ -159,13 +207,34 @@ class NotificationService {
 	 * @param array    $notification_data Payment notification data.
 	 * @return void
 	 */
-	private function process_failed_payment( WC_Order $order, array $notification_data ) {
+	private function process_failed_payment( WC_Order $order, array $notification_data ): void {
+		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
 		$order->update_status(
 			'failed',
 			sprintf(
-				__( 'Payment failed. Result: %1$s, Code: %2$s', 'novabanka-ipg-gateway' ),
+				__( 'Payment failed. Result: %1$s, Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
 				$notification_data['result'],
-				$notification_data['responsecode'] ?? 'N/A'
+				$notification_data['responsecode'] ?? 'N/A',
+				$formatted_amount
+			)
+		);
+	}
+
+	/**
+	 * Process cancelled payment.
+	 *
+	 * @param WC_Order $order Order object.
+	 * @param array    $notification_data Payment notification data.
+	 * @return void
+	 */
+	private function process_cancelled_payment( WC_Order $order, array $notification_data ): void {
+		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
+		$order->update_status(
+			'cancelled',
+			sprintf(
+				__( 'Payment was cancelled. Result: %1$s, Amount: %2$s', 'novabanka-ipg-gateway' ),
+				$notification_data['result'],
+				$formatted_amount
 			)
 		);
 	}

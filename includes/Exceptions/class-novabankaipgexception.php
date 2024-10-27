@@ -21,9 +21,6 @@ class NovaBankaIPGException extends \Exception {
 	/**
 	 * Error codes and their messages
 	 */
-	/**
-	 * Error codes mapping
-	 */
 	private const ERROR_CODES = array(
 		// API Errors.
 		'API_ERROR'             => array(
@@ -114,7 +111,7 @@ class NovaBankaIPGException extends \Exception {
 	) {
 		$error_code = self::ERROR_CODES[ $error_type ]['code'] ?? 1000;
 		parent::__construct(
-			$message,
+			$message ?: self::ERROR_CODES[ $error_type ]['message'],
 			$error_code,
 			$previous
 		);
@@ -148,10 +145,7 @@ class NovaBankaIPGException extends \Exception {
 	 * @return self
 	 */
 	public static function apiError( string $message = '', $data = null ): self {
-		$exception             = new self( $message, self::ERROR_CODES['API_ERROR']['code'] );
-		$exception->error_type = 'API_ERROR';
-		$exception->error_data = $data;
-		return $exception;
+		return new self( $message, 'API_ERROR', $data );
 	}
 
 	/**
@@ -177,34 +171,35 @@ class NovaBankaIPGException extends \Exception {
 	}
 
 	/**
-	 * Get additional error data.
-	 *
-	 * @return mixed
-	 */
-	public function getData() {
-		return $this->error_data;
-	}
-
-	/**
-	 * Get error type.
-	 *
-	 * @return string
-	 */
-	public function getType() {
-		return $this->error_type;
-	}
-
-	/**
 	 * Create an invalid signature exception
 	 *
 	 * @param string $message Error message.
 	 * @param mixed  $data    Additional error data.
 	 * @return self
 	 */
-	public static function invalidSignature( string $message, $data = null ): self {
-		$exception             = new self( $message, self::ERROR_CODES['INVALID_SIGNATURE']['code'] );
-		$exception->error_type = 'INVALID_SIGNATURE';
-		$exception->error_data = $data;
-		return $exception;
+	public static function invalidSignature( string $message = '', $data = null ): self {
+		return new self( $message, 'INVALID_SIGNATURE', $data );
+	}
+
+	/**
+	 * Create an order not found exception
+	 *
+	 * @param string $message Error message.
+	 * @param mixed  $data    Additional error data.
+	 * @return self
+	 */
+	public static function orderNotFound( string $message = '', $data = null ): self {
+		return new self( $message, 'ORDER_NOT_FOUND', $data );
+	}
+
+	/**
+	 * Create invalid configuration exception
+	 *
+	 * @param string $message Error message.
+	 * @param mixed  $data    Additional error data.
+	 * @return self
+	 */
+	public static function invalidConfiguration( string $message = '', $data = null ): self {
+		return new self( $message, 'INVALID_CONFIGURATION', $data );
 	}
 }
