@@ -40,29 +40,29 @@ class Config {
 		'title'                  => 'NovaBanka IPG',
 		'description'            => 'Pay securely using NovaBanka IPG.',
 
-		// Test mode settings
+		// Test mode settings.
 		'test_api_endpoint'      => 'https://ipgtest.novabanka.com/IPGWeb/servlet/PaymentInitRequest',
 		'test_terminal_id'       => '',
 		'test_terminal_password' => '',
 		'test_secret_key'        => '',
 
-		// Production mode settings
+		// Production mode settings.
 		'live_api_endpoint'      => 'https://ipg.novabanka.com/IPGWeb/servlet/PaymentInitRequest',
 		'live_terminal_id'       => '',
 		'live_terminal_password' => '',
 		'live_secret_key'        => '',
 
-		// Action settings
+		// Action settings.
 		'action'                 => '1', // 1 = PURCHASE, 4 = AUTHORIZATION
 
-		// Response URLs
-		'response_url'           => '',  // Will be dynamically set
-		'error_url'              => '',   // Will be dynamically set
+		// Response URLs.
+		'response_url'           => '',  // Will be dynamically set.
+		'error_url'              => '',   // Will be dynamically set.
 
-		// Language settings
+		// Language settings.
 		'langid'                 => 'EN',
 
-		// 3DS settings
+		// 3DS settings.
 		'threeds_enabled'        => 'yes',
 		'threeds_auth_method'    => '02',
 		'threeds_prior_auth'     => '01',
@@ -256,6 +256,12 @@ class Config {
 		return true;
 	}
 
+	/**
+	 * Get form fields for the payment gateway settings.
+	 *
+	 * @since 1.0.0
+	 * @return array Array of form field settings.
+	 */
 	public static function get_form_fields(): array {
 		return array(
 			'enabled'                => array(
@@ -264,7 +270,7 @@ class Config {
 				'label'   => __( 'Enable NovaBanka IPG Gateway', 'novabanka-ipg-gateway' ),
 				'default' => self::DEFAULT_SETTINGS['enabled'],
 			),
-			// Test Mode
+			// Test Mode.
 			'test_mode'              => array(
 				'title'       => __( 'Test Mode', 'novabanka-ipg-gateway' ),
 				'type'        => 'checkbox',
@@ -272,7 +278,7 @@ class Config {
 				'default'     => self::DEFAULT_SETTINGS['test_mode'],
 				'description' => __( 'Place the payment gateway in test mode.', 'novabanka-ipg-gateway' ),
 			),
-			// Test Credentials
+			// Test Credentials.
 			'test_terminal_id'       => array(
 				'title'       => __( 'Test Terminal ID', 'novabanka-ipg-gateway' ),
 				'type'        => 'text',
@@ -294,7 +300,7 @@ class Config {
 				'default'     => self::DEFAULT_SETTINGS['test_secret_key'],
 				'desc_tip'    => true,
 			),
-			// Live Credentials
+			// Live Credentials.
 			'live_terminal_id'       => array(
 				'title'       => __( 'Live Terminal ID', 'novabanka-ipg-gateway' ),
 				'type'        => 'text',

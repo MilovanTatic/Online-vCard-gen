@@ -155,7 +155,7 @@ class DataHandler {
 				sprintf(
 					/* translators: %s: currency code */
 					esc_html__( 'Unsupported currency: %s', 'novabanka-ipg-gateway' ),
-					$currency
+					esc_html( $currency )
 				)
 			);
 		}
@@ -211,7 +211,7 @@ class DataHandler {
 					sprintf(
 						/* translators: %s: field name */
 						esc_html__( 'Required field missing: %s', 'novabanka-ipg-gateway' ),
-						$field
+						esc_html( $field )
 					)
 				);
 			}

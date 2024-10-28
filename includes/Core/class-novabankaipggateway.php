@@ -21,6 +21,7 @@ use NovaBankaIPG\Utils\Config;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\DataHandler;
+use NovaBankaIPG\Utils\MessageHandler;
 use NovaBankaIPG\Utils\ThreeDSHandler;
 use NovaBankaIPG\Services\PaymentService;
 use NovaBankaIPG\Services\NotificationService;
@@ -50,6 +51,13 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	 * @var DataHandler
 	 */
 	protected $data_handler;
+
+	/**
+	 * Message Handler instance.
+	 *
+	 * @var MessageHandler
+	 */
+	protected $message_handler;
 
 	/**
 	 * ThreeDS Handler instance.
@@ -112,6 +120,15 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 		// Get settings.
 		$settings = Config::get_all_settings();
 
+		// Initialize message handler.
+		$this->message_handler = new MessageHandler(
+			$settings['terminal_id'],
+			$settings['terminal_password'],
+			$settings['secret_key'],
+			$this->data_handler,
+			$this->logger
+		);
+
 		// Initialize API handler.
 		$this->api_handler = new APIHandler(
 			$settings['api_endpoint'],
@@ -123,17 +140,19 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 			$settings['test_mode'] ?? 'yes'
 		);
 
-		// Initialize payment service.
+		// Initialize payment service with correct dependency order.
 		$this->payment_service = new PaymentService(
 			$this->api_handler,
-			$this->logger,
-			$this->data_handler
+			$this->message_handler,
+			$this->data_handler,
+			$this->logger
 		);
 
-		// Initialize notification service with correct dependencies.
+		// Initialize notification service.
 		$this->notification_service = new NotificationService(
-			$this->logger,      // Pass Logger instance first
-			$this->data_handler // Pass DataHandler instance second
+			$this->logger,
+			$this->message_handler,
+			$this->data_handler
 		);
 
 		// Initialize 3DS handler.
@@ -151,56 +170,58 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Process the payment.
+	 * Process payment for an order.
 	 *
-	 * @param int $order_id Order ID.
-	 * @return array
-	 * @throws NovaBankaIPGException When payment processing fails.
+	 * @param mixed $order_id Order ID.
+	 * @return array|void Payment result.
+	 * @throws NovaBankaIPGException When order is not found or payment initialization fails.
 	 */
-	public function process_payment( int $order_id ): array {
+	public function process_payment( $order_id ) {
 		try {
+			// Get order.
 			$order = wc_get_order( $order_id );
 			if ( ! $order ) {
-				throw new NovaBankaIPGException( esc_html__( 'Invalid order ID.', 'novabanka-ipg-gateway' ) );
+				throw new NovaBankaIPGException( __( 'Order not found.', 'novabanka-ipg-gateway' ) );
 			}
 
-			// Prepare payment data.
+			// Initialize payment.
 			$payment_data = array(
-				'order_id' => $order_id,
-				'amount'   => $order->get_total(),
-				'currency' => $order->get_currency(),
-				'trackid'  => $order->get_order_key(),
-				'langid'   => substr( get_locale(), 0, 2 ),
-				'email'    => $order->get_billing_email(),
+				'action'            => $this->get_option( 'action' ),
+				'terminal_id'       => $this->get_option( 'terminal_id' ),
+				'terminal_password' => $this->get_option( 'terminal_password' ),
+				'payment_timeout'   => $this->get_option( 'payment_timeout' ),
+				'payment_mode'      => $this->get_option( 'payment_mode' ),
 			);
 
-			// Allow plugins to modify payment data.
-			$payment_data = apply_filters( 'novabankaipg_payment_data', $payment_data, $order );
-
-			// Initialize payment through PaymentService.
+			// Process payment through service.
 			$response = $this->payment_service->initialize_payment( $order, $payment_data );
 
-			// Update order status.
-			$order->update_status(
-				'on-hold',
-				esc_html__( 'Awaiting payment confirmation from NovaBanka IPG.', 'novabanka-ipg-gateway' )
+			// Handle response.
+			if ( isset( $response['browserRedirectionURL'] ) ) {
+				// Mark as on-hold.
+				$order->update_status(
+					'on-hold',
+					__( 'Awaiting IPG payment.', 'novabanka-ipg-gateway' )
+				);
+
+				// Return success with redirect URL.
+				return array(
+					'result'   => 'success',
+					'redirect' => $response['browserRedirectionURL'],
+				);
+			}
+
+			// Handle error case.
+			throw new NovaBankaIPGException(
+				__( 'Payment initialization failed.', 'novabanka-ipg-gateway' )
 			);
 
-			return array(
-				'result'   => 'success',
-				'redirect' => $response['browserRedirectionURL'],
+		} catch ( \Exception $e ) {
+			wc_add_notice(
+				esc_html( $e->getMessage() ),
+				'error'
 			);
-
-		} catch ( Exception $e ) {
-			$this->logger->error(
-				'Payment processing failed.',
-				array(
-					'order_id' => $order_id,
-					'error'    => esc_html( $e->getMessage() ),
-				)
-			);
-
-			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
+			return;
 		}
 	}
 

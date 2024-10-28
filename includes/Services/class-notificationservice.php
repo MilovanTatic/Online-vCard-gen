@@ -1,9 +1,8 @@
 <?php
 /**
- * NotificationService Class
+ * Notification Service Class
  *
- * This class is responsible for managing notification-related logic for NovaBanka IPG.
- * It handles notifications received from IPG and processes them accordingly.
+ * Handles payment notifications from the IPG gateway.
  *
  * @package NovaBankaIPG\Services
  * @since 1.0.1
@@ -14,16 +13,14 @@ namespace NovaBankaIPG\Services;
 use WC_Order;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\DataHandler;
-use NovaBankaIPG\Utils\SharedUtilities;
+use NovaBankaIPG\Utils\MessageHandler;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
-use Exception;
 
 /**
- * Class NotificationService
- *
- * Handles IPG payment notifications and processes order status updates.
+ * Handles payment notification processing.
  */
 class NotificationService {
+
 	/**
 	 * Logger instance.
 	 *
@@ -32,7 +29,14 @@ class NotificationService {
 	private $logger;
 
 	/**
-	 * Data handler instance.
+	 * Message Handler instance.
+	 *
+	 * @var MessageHandler
+	 */
+	private $message_handler;
+
+	/**
+	 * Data Handler instance.
 	 *
 	 * @var DataHandler
 	 */
@@ -41,73 +45,62 @@ class NotificationService {
 	/**
 	 * Constructor.
 	 *
-	 * @param Logger      $logger       Logger instance.
-	 * @param DataHandler $data_handler Data handler instance.
+	 * @param Logger         $logger          Logger instance.
+	 * @param MessageHandler $message_handler Message Handler instance.
+	 * @param DataHandler    $data_handler    Data Handler instance.
 	 */
 	public function __construct(
 		Logger $logger,
+		MessageHandler $message_handler,
 		DataHandler $data_handler
 	) {
-		$this->logger       = $logger;
-		$this->data_handler = $data_handler;
+		$this->logger          = $logger;
+		$this->message_handler = $message_handler;
+		$this->data_handler    = $data_handler;
 	}
 
 	/**
-	 * Handle incoming notification from IPG.
+	 * Handle notification from IPG.
 	 *
-	 * @param array $notification_data The notification data received from IPG.
-	 * @return void
-	 * @throws NovaBankaIPGException When the notification handling fails.
+	 * @param array $notification_data Notification data from IPG.
+	 * @return array Response data.
+	 * @throws NovaBankaIPGException When notification processing fails.
 	 */
-	public function handle_notification( array $notification_data ): void {
+	public function handle_notification( array $notification_data ): array {
 		try {
-			// Verify nonce for security purposes.
-			if ( ! check_ajax_referer( 'novabankaipg-nonce', 'nonce', false ) ) {
-				throw new NovaBankaIPGException( 'Invalid security nonce.' );
-			}
-
-			// Sanitize incoming data for security.
-			$notification_data = $this->sanitize_notification_data( $notification_data );
-
-			// Verify message signature for authenticity.
-			$this->verify_notification_signature( $notification_data );
-
-			// Get and validate order details.
-			$order = $this->get_order_from_notification( $notification_data );
-
-			// Process notification based on payment result.
-			switch ( $notification_data['result'] ) {
-				case 'CAPTURED':
-					$this->process_successful_payment( $order, $notification_data );
-					break;
-				case 'FAILED':
-					$this->process_failed_payment( $order, $notification_data );
-					break;
-				case 'CANCELLED':
-					$this->process_cancelled_payment( $order, $notification_data );
-					break;
-				default:
-					throw new NovaBankaIPGException( 'Invalid notification result.' );
-			}
-
-			// Store transaction data for future reference.
-			$this->store_transaction_data( $order, $notification_data );
-
-			/**
-			 * Action after notification processing.
-			 *
-			 * @since 1.0.1
-			 * @param WC_Order $order The order being processed.
-			 * @param array $notification_data The notification data.
-			 */
-			do_action( 'novabankaipg_after_notification', $order, $notification_data );
-
-		} catch ( Exception $e ) {
-			$this->logger->error(
-				'Notification handling failed.',
+			$this->logger->info(
+				'Processing payment notification.',
 				array(
-					'error'             => esc_html( $e->getMessage() ),
-					'notification_data' => $this->data_handler->redact_sensitive_data( $notification_data ),
+					'notification' => $this->data_handler->redact_sensitive_data( $notification_data ),
+				)
+			);
+
+			// Validate notification data.
+			$this->validate_notification( $notification_data );
+
+			// Get order.
+			$order = $this->get_order( $notification_data );
+
+			// Process notification.
+			$result = $this->process_notification( $order, $notification_data );
+
+			// Log success.
+			$this->logger->info(
+				'Payment notification processed successfully.',
+				array(
+					'order_id' => $order->get_id(),
+					'result'   => $result,
+				)
+			);
+
+			return $result;
+
+		} catch ( \Exception $e ) {
+			$this->logger->error(
+				'Payment notification processing failed.',
+				array(
+					'error' => $e->getMessage(),
+					'data'  => $this->data_handler->redact_sensitive_data( $notification_data ),
 				)
 			);
 			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
@@ -115,180 +108,127 @@ class NotificationService {
 	}
 
 	/**
-	 * Process successful payment.
+	 * Validate notification data.
 	 *
-	 * @param WC_Order $order Order object.
-	 * @param array    $notification_data Payment notification data.
-	 * @return void
+	 * @param array $notification_data Notification data to validate.
+	 * @throws NovaBankaIPGException When validation fails.
+	 */
+	private function validate_notification( array $notification_data ): void {
+		// Verify message signature.
+		if ( ! $this->message_handler->verify_notification_signature( $notification_data ) ) {
+			throw new NovaBankaIPGException(
+				esc_html__( 'Invalid notification signature.', 'novabanka-ipg-gateway' ),
+				'INVALID_SIGNATURE'
+			);
+		}
+
+		// Verify required fields.
+		$required_fields = array( 'paymentid', 'trackid', 'result' );
+		foreach ( $required_fields as $field ) {
+			if ( ! isset( $notification_data[ $field ] ) ) {
+				throw new NovaBankaIPGException(
+					sprintf(
+						/* translators: %s: field name */
+						esc_html__( 'Missing required field: %s', 'novabanka-ipg-gateway' ),
+						esc_html( $field )
+					),
+					'MISSING_FIELD'
+				);
+			}
+		}
+	}
+
+	/**
+	 * Get order from notification data.
+	 *
+	 * @param array $notification_data Notification data.
+	 * @return WC_Order Order object.
+	 * @throws NovaBankaIPGException When order cannot be found.
+	 */
+	private function get_order( array $notification_data ): WC_Order {
+		$order_id = absint( $notification_data['trackid'] );
+		$order    = wc_get_order( $order_id );
+
+		if ( ! $order ) {
+			throw new NovaBankaIPGException(
+				sprintf(
+					/* translators: %d: order ID */
+					esc_html__( 'Order not found: %d', 'novabanka-ipg-gateway' ),
+					esc_html( $order_id )
+				),
+				'ORDER_NOT_FOUND'
+			);
+		}
+
+		return $order;
+	}
+
+	/**
+	 * Process notification for order.
+	 *
+	 * @param WC_Order $order            Order to process.
+	 * @param array    $notification_data Notification data.
+	 * @return array Response data.
+	 */
+	private function process_notification( WC_Order $order, array $notification_data ): array {
+		$result = $notification_data['result'];
+
+		if ( 'CAPTURED' === $result || 'APPROVED' === $result ) {
+			$this->process_successful_payment( $order, $notification_data );
+		} else {
+			$this->process_failed_payment( $order, $notification_data );
+		}
+
+		/**
+		 * Fires after payment notification is processed.
+		 *
+		 * @param WC_Order $order            The order object.
+		 * @param array    $notification_data The notification data.
+		 */
+		do_action( 'novabankaipg_after_notification', $order, $notification_data );
+
+		return array(
+			'success'  => true,
+			'order_id' => $order->get_id(),
+			'result'   => $result,
+		);
+	}
+
+	/**
+	 * Process successful payment notification.
+	 *
+	 * @param WC_Order $order            Order to process.
+	 * @param array    $notification_data Notification data.
 	 */
 	private function process_successful_payment( WC_Order $order, array $notification_data ): void {
-		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
-		$order->payment_complete( $notification_data['tranid'] );
+		// Update payment details.
+		$order->payment_complete( $notification_data['paymentid'] );
 		$order->add_order_note(
 			sprintf(
-				/* translators: %1$s: Transaction ID, %2$s: Auth Code, %3$s: Amount */
-				esc_html__( 'Payment completed successfully. Transaction ID: %1$s, Auth Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
-				$notification_data['tranid'],
-				$notification_data['auth'],
-				$formatted_amount
-			)
-		);
-
-		$this->store_transaction_data( $order, $notification_data );
-
-		/**
-		 * Action after successful payment processing.
-		 *
-		 * @since 1.0.1
-		 * @param WC_Order $order            The order being processed.
-		 * @param array    $notification_data The notification data.
-		 */
-		do_action( 'novabankaipg_after_successful_payment', $order, $notification_data );
-	}
-
-	/**
-	 * Process declined payment.
-	 *
-	 * @param WC_Order $order Order object.
-	 * @param array    $notification_data Payment notification data.
-	 * @return void
-	 */
-	private function process_declined_payment( WC_Order $order, array $notification_data ): void {
-		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
-		$order->update_status(
-			'on-hold',
-			sprintf(
-				/* translators: %1$s: Result, %2$s: Code, %3$s: Amount */
-				esc_html__( 'Payment was declined. Result: %1$s, Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
+				/* translators: 1: Result 2: Reference number */
+				esc_html__( 'Payment successful. Result: %1$s, Reference: %2$s', 'novabanka-ipg-gateway' ),
 				$notification_data['result'],
-				$notification_data['responsecode'] ?? 'N/A',
-				$formatted_amount
+				$notification_data['ref']
 			)
 		);
-
-		/**
-		 * Action after declined payment processing.
-		 *
-		 * @since 1.0.1
-		 * @param WC_Order $order            The order being processed.
-		 * @param array    $notification_data The notification data.
-		 */
-		do_action( 'novabankaipg_after_declined_payment', $order, $notification_data );
 	}
 
 	/**
-	 * Process failed payment.
+	 * Process failed payment notification.
 	 *
-	 * @param WC_Order $order Order object.
-	 * @param array    $notification_data Payment notification data.
-	 * @return void
+	 * @param WC_Order $order            Order to process.
+	 * @param array    $notification_data Notification data.
 	 */
 	private function process_failed_payment( WC_Order $order, array $notification_data ): void {
-		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
 		$order->update_status(
 			'failed',
 			sprintf(
-				/* translators: %1$s: Result, %2$s: Code, %3$s: Amount */
-				esc_html__( 'Payment failed. Result: %1$s, Code: %2$s, Amount: %3$s', 'novabanka-ipg-gateway' ),
+				/* translators: 1: Result 2: Response code 3: Reference number */
+				esc_html__( 'Payment failed. Result: %1$s, Response code: %2$s, Reference: %3$s', 'novabanka-ipg-gateway' ),
 				$notification_data['result'],
-				$notification_data['responsecode'] ?? 'N/A',
-				$formatted_amount
+				$notification_data['responsecode'],
+				$notification_data['ref']
 			)
 		);
-
-		/**
-		 * Action after failed payment processing.
-		 *
-		 * @since 1.0.1
-		 * @param WC_Order $order            The order being processed.
-		 * @param array    $notification_data The notification data.
-		 */
-		do_action( 'novabankaipg_after_failed_payment', $order, $notification_data );
-	}
-
-	/**
-	 * Process cancelled payment.
-	 *
-	 * @param WC_Order $order Order object.
-	 * @param array    $notification_data Payment notification data.
-	 * @return void
-	 */
-	private function process_cancelled_payment( WC_Order $order, array $notification_data ): void {
-		$formatted_amount = SharedUtilities::format_amount( $order->get_total() );
-		$order->update_status(
-			'cancelled',
-			sprintf(
-				/* translators: %1$s: Result, %2$s: Amount */
-				esc_html__( 'Payment was cancelled. Result: %1$s, Amount: %2$s', 'novabanka-ipg-gateway' ),
-				$notification_data['result'],
-				$formatted_amount
-			)
-		);
-
-		/**
-		 * Action after cancelled payment processing.
-		 *
-		 * @since 1.0.1
-		 * @param WC_Order $order            The order being processed.
-		 * @param array    $notification_data The notification data.
-		 */
-		do_action( 'novabankaipg_after_cancelled_payment', $order, $notification_data );
-	}
-
-	/**
-	 * Store transaction data in order meta.
-	 *
-	 * @param WC_Order $order Order object.
-	 * @param array    $notification_data Payment notification data.
-	 * @return void
-	 */
-	private function store_transaction_data( WC_Order $order, array $notification_data ): void {
-		$order->update_meta_data( '_novabankaipg_auth_code', $notification_data['auth'] );
-		$order->update_meta_data( '_novabankaipg_card_type', $notification_data['cardtype'] ?? 'unknown' );
-		$order->update_meta_data( '_novabankaipg_card_last4', $notification_data['cardLastFourDigits'] );
-		$order->update_meta_data( '_novabankaipg_payment_reference', $notification_data['paymentReference'] ?? 'N/A' );
-		$order->save();
-	}
-
-	/**
-	 * Verify notification signature.
-	 *
-	 * @param array $notification_data Notification data to verify.
-	 * @return void
-	 * @throws NovaBankaIPGException If signature verification fails.
-	 */
-	private function verify_notification_signature( array $notification_data ): void {
-		$verifier_fields = array(
-			$notification_data['msgName'],
-			$notification_data['version'],
-			$notification_data['paymentid'],
-			$notification_data['amt'],
-			$notification_data['status'],
-			$notification_data['result'],
-		);
-
-		$calculated_verifier = SharedUtilities::generate_message_verifier( ...$verifier_fields );
-
-		if ( ! hash_equals( $calculated_verifier, $notification_data['msgVerifier'] ) ) {
-			throw new NovaBankaIPGException( 'Invalid notification message signature.' );
-		}
-	}
-
-	/**
-	 * Sanitize notification data.
-	 *
-	 * @param array $data Raw notification data.
-	 * @return array Sanitized data.
-	 */
-	private function sanitize_notification_data( array $data ): array {
-		$sanitized = array();
-		foreach ( $data as $key => $value ) {
-			if ( is_array( $value ) ) {
-				$sanitized[ sanitize_key( $key ) ] = $this->sanitize_notification_data( $value );
-			} else {
-				$sanitized[ sanitize_key( $key ) ] = sanitize_text_field( $value );
-			}
-		}
-		return $sanitized;
 	}
 }

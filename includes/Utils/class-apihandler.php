@@ -231,9 +231,8 @@ class APIHandler {
 					'response' => $this->redact_sensitive_data( $response ),
 				)
 			);
-
 			// Check for error response.
-			if ( isset( $response['type'] ) && $response['type'] === 'error' ) {
+			if ( isset( $response['type'] ) && 'error' === $response['type'] ) {
 				throw new NovaBankaIPGException(
 					sprintf(
 						'IPG Error: %s - %s',
@@ -264,7 +263,7 @@ class APIHandler {
 					'response' => isset( $response ) ? $this->redact_sensitive_data( $response ) : null,
 				)
 			);
-			throw new NovaBankaIPGException( $e->getMessage() );
+			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
 		}
 	}
 }

@@ -143,10 +143,15 @@ class NovaBankaIPG {
 			$this->container['logger']
 		);
 
-		// Initialize API handler (ONLY HTTP communication).
+		// Initialize API handler with dependencies.
 		$this->container['api_handler'] = new APIHandler(
-			$settings['api_endpoint'],
-			$this->container['logger']
+			$settings['api_endpoint'] ?? '',
+			$settings['terminal_id'] ?? '',
+			$settings['terminal_password'] ?? '',
+			$settings['secret_key'] ?? '',
+			$this->container['logger'],
+			$this->container['data_handler'],
+			$settings['test_mode'] ?? 'yes'
 		);
 
 		// Initialize payment service (Business logic).
@@ -159,9 +164,9 @@ class NovaBankaIPG {
 
 		// Initialize notification service.
 		$this->container['notification_service'] = new NotificationService(
+			$this->container['logger'],
 			$this->container['message_handler'],
-			$this->container['data_handler'],
-			$this->container['logger']
+			$this->container['data_handler']
 		);
 	}
 
