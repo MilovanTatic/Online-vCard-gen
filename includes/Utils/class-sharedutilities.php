@@ -11,9 +11,9 @@
 namespace NovaBankaIPG\Utils;
 
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
-use NovaBankaIPG\Interfaces\SharedUtilitiesInterface;
-use NovaBankaIPG\Interfaces\LoggerInterface;
-use NovaBankaIPG\Interfaces\DataHandlerInterface;
+use NovaBankaIPG\Utils\SharedUtilities;
+use NovaBankaIPG\Utils\Logger;
+use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Config\Config;
 
 /**
@@ -22,7 +22,7 @@ use NovaBankaIPG\Config\Config;
  * @package NovaBankaIPG\Utils
  * @since 1.0.1
  */
-class SharedUtilities implements SharedUtilitiesInterface {
+class SharedUtilities {
 
 	/**
 	 * Get the API endpoint URL based on test mode setting.

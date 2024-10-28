@@ -10,7 +10,7 @@
  * @wordpress-plugin
  * Plugin Name: NovaBanka IPG33 Payment Gateway
  * Description: 3D Secure payment gateway integration for WooCommerce
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Milovan Tatić
  * Text Domain: novabankaipg
  * Domain Path: /languages
@@ -372,13 +372,18 @@ class NovaBankaIPG {
 			return;
 		}
 
+		// Convert class name to file path.
 		$file_path = str_replace(
 			array( 'NovaBankaIPG\\', '\\' ),
 			array( '', DIRECTORY_SEPARATOR ),
 			$class_name
 		);
 
-		$file = NOVABANKAIPG_PLUGIN_DIR . '/includes/' . $file_path . '.php';
+		// Convert to lowercase.
+		$file_name = 'class-' . strtolower( basename( $file_path ) ) . '.php';
+		$file_path = dirname( $file_path ) . DIRECTORY_SEPARATOR . $file_name;
+
+		$file = NOVABANKAIPG_PLUGIN_DIR . '/includes/' . $file_path;
 
 		if ( file_exists( $file ) ) {
 			require_once $file;

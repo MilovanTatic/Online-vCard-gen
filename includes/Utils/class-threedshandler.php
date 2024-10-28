@@ -11,9 +11,6 @@
 
 namespace NovaBankaIPG\Utils;
 
-use NovaBankaIPG\Interfaces\ThreeDSHandlerInterface;
-use NovaBankaIPG\Interfaces\APIHandlerInterface;
-use NovaBankaIPG\Interfaces\LoggerInterface;
 use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\Config;
@@ -31,29 +28,29 @@ use Exception;
  * @package NovaBankaIPG\Utils
  * @since 1.0.1
  */
-class ThreeDSHandler implements ThreeDSHandlerInterface {
+class ThreeDSHandler {
 
 	/**
 	 * API Handler instance.
 	 *
-	 * @var APIHandlerInterface
+	 * @var APIHandler
 	 */
 	private $api_handler;
 
 	/**
 	 * Logger instance.
 	 *
-	 * @var LoggerInterface
+	 * @var Logger
 	 */
 	private $logger;
 
 	/**
 	 * Constructor for the ThreeDSHandler class.
 	 *
-	 * @param APIHandlerInterface $api_handler API handler instance.
-	 * @param LoggerInterface     $logger      Logger instance.
+	 * @param APIHandler $api_handler API handler instance.
+	 * @param Logger     $logger      Logger instance.
 	 */
-	public function __construct( APIHandlerInterface $api_handler, LoggerInterface $logger ) {
+	public function __construct( APIHandler $api_handler, Logger $logger ) {
 		$this->api_handler = $api_handler;
 		$this->logger      = $logger;
 	}
