@@ -12,7 +12,6 @@
 namespace NovaBankaIPG\Services;
 
 use WC_Order;
-use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Utils\SharedUtilities;
@@ -23,13 +22,6 @@ use Exception;
  * Handles payment processing operations.
  */
 class PaymentService {
-	/**
-	 * API Handler instance.
-	 *
-	 * @var APIHandler
-	 */
-	private $api_handler;
-
 	/**
 	 * Logger instance.
 	 *
@@ -47,16 +39,13 @@ class PaymentService {
 	/**
 	 * Constructor.
 	 *
-	 * @param APIHandler  $api_handler  API handler instance.
 	 * @param Logger      $logger       Logger instance.
 	 * @param DataHandler $data_handler Data handler instance.
 	 */
 	public function __construct(
-		APIHandler $api_handler,
 		Logger $logger,
 		DataHandler $data_handler
 	) {
-		$this->api_handler  = $api_handler;
 		$this->logger       = $logger;
 		$this->data_handler = $data_handler;
 	}
@@ -75,50 +64,52 @@ class PaymentService {
 		}
 
 		try {
-			// Prepare payment data.
-			$payment_data = array(
-				'order_id' => $order_id,
-				'amount'   => $order->get_total(),
-				'currency' => $order->get_currency(),
-				'trackid'  => $order->get_order_key(),
+			$this->logger->info( 'Payment process initialized.', array( 'order_id' => $order_id ) );
+
+			// 1. Prepare payment data
+			$payment_data = $this->prepare_payment_data( $order );
+
+			// 2. Generate message verifier
+			$payment_data['msgVerifier'] = SharedUtilities::generate_message_verifier(
+				$payment_data['msgName'],
+				$payment_data['version'],
+				$payment_data['id'],
+				$payment_data['password'],
+				$payment_data['amt'],
+				$payment_data['trackid']
 			);
 
-			// Allow plugins to modify the payment data.
-			$payment_data = apply_filters( 'novabankaipg_before_payment_process', $payment_data, $order );
-
-			// Validate required fields according to IPG guide.
-			SharedUtilities::validate_required_fields(
-				$payment_data,
-				array( 'amount', 'currency', 'order_id', 'trackid' )
+			// 3. Make API request
+			$response = wp_remote_post(
+				SharedUtilities::get_api_endpoint( '/PaymentInitRequest' ),
+				array(
+					'headers' => array( 'Content-Type' => 'application/json' ),
+					'body'    => wp_json_encode( $payment_data ),
+					'timeout' => 30,
+				)
 			);
 
-			// Initialize payment.
-			$response = $this->initialize_payment( $order, $payment_data );
+			if ( is_wp_error( $response ) ) {
+				throw new NovaBankaIPGException( $response->get_error_message() );
+			}
 
-			// Update order status.
-			$order->update_status(
-				'on-hold',
-				esc_html__( 'Payment initialized. Awaiting customer redirection.', 'novabanka-ipg-gateway' )
-			);
-
-			// Store payment ID for future reference.
-			$order->update_meta_data( '_novabankaipg_payment_id', $response['paymentid'] );
-			$order->save();
+			// 4. Process response
+			$result = $this->process_api_response( $response, $order );
 
 			return array(
 				'result'   => 'success',
-				'redirect' => $response['browserRedirectionURL'],
+				'redirect' => $result['browserRedirectionURL'],
 			);
 
 		} catch ( Exception $e ) {
 			$this->logger->error(
-				'Payment processing failed: ' . esc_html( $e->getMessage() ),
+				'Payment process failed.',
 				array(
 					'order_id' => $order_id,
 					'error'    => $e->getMessage(),
 				)
 			);
-			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
+			throw new NovaBankaIPGException( $e->getMessage() );
 		}
 	}
 
@@ -192,14 +183,17 @@ class PaymentService {
 	 * Initialize payment for an order.
 	 *
 	 * @param WC_Order $order        The order to process payment for.
-	 * @param array    $payment_data The payment data.
+	 * @param array    $payment_data Additional payment data.
 	 * @return array Payment initialization response.
 	 * @throws NovaBankaIPGException When payment initialization fails.
 	 */
-	private function initialize_payment( WC_Order $order, array $payment_data ): array {
+	public function initialize_payment( WC_Order $order, array $payment_data ): array {
 		try {
-			// Prepare payment data according to IPG guide.
-			$init_data = $this->prepare_payment_init_data( $order, $payment_data );
+			// Merge payment data with prepared data.
+			$init_data = array_merge(
+				$this->prepare_payment_init_data( $order ),
+				$payment_data
+			);
 
 			/**
 			 * Filter payment data before processing.
@@ -219,54 +213,70 @@ class PaymentService {
 			 */
 			do_action( 'novabankaipg_before_payment_init', $init_data, $order );
 
-			// Send payment initialization request.
-			$response = $this->api_handler->send_payment_init_request( $init_data );
-
-			/**
-			 * Action after payment initialization.
-			 *
-			 * @since 1.0.1
-			 * @param array    $response  The API response.
-			 * @param WC_Order $order     The order being processed.
-			 * @param array    $init_data The payment initialization data.
-			 */
-			do_action( 'novabankaipg_after_payment_init', $response, $order, $init_data );
-
-			return $response;
+			// Use the existing send_payment_init_request method.
+			return $this->api_handler->send_payment_init_request( $init_data );
 
 		} catch ( Exception $e ) {
-			$this->logger->error(
-				'Payment initialization failed: ' . esc_html( $e->getMessage() ),
-				array(
-					'order_id' => $order->get_id(),
-				)
-			);
-			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
+			throw new NovaBankaIPGException( $e->getMessage() );
 		}
 	}
 
 	/**
-	 * Prepare payment initialization data according to IPG guide.
+	 * Prepare payment initialization data.
 	 *
-	 * @param WC_Order $order        The order to prepare data for.
-	 * @param array    $payment_data The base payment data.
-	 * @return array Prepared payment initialization data.
+	 * @param WC_Order $order The order being processed.
+	 * @return array Prepared payment data.
 	 */
-	private function prepare_payment_init_data( WC_Order $order, array $payment_data ): array {
-		return array(
+	private function prepare_payment_init_data( WC_Order $order ): array {
+		// Get the numeric currency code and convert it to ISO 4217 alpha code.
+		$currency = $this->convert_currency_to_iso( $order->get_currency() );
+
+		$init_data = array(
 			'msgName'     => 'PaymentInitRequest',
 			'version'     => '1',
-			'amount'      => $this->data_handler->format_amount( $payment_data['amount'] ),
-			'currency'    => $this->data_handler->get_currency_code( $payment_data['currency'] ),
-			'trackid'     => $payment_data['trackid'],
-			'order_id'    => $payment_data['order_id'],
+			'amount'      => number_format( $order->get_total(), 2, '.', '' ),
+			'currency'    => $currency,
+			'trackid'     => $order->get_order_key(),
+			'order_id'    => $order->get_id(),
 			'responseURL' => $this->get_response_url( $order ),
 			'errorURL'    => $this->get_error_url( $order ),
 			'langid'      => $this->get_language_code(),
 			'email'       => $order->get_billing_email(),
 			'udf1'        => $order->get_id(),
-			'udf2'        => $order->get_payment_method(),
+			'udf2'        => 'novabankaipg',
 			'udf3'        => wp_json_encode( $this->get_order_items( $order ) ),
+		);
+
+		return $init_data;
+	}
+
+	/**
+	 * Convert numeric currency code to ISO 4217 alpha code.
+	 *
+	 * @param string $currency Currency code.
+	 * @return string ISO 4217 alpha code.
+	 * @throws NovaBankaIPGException If currency is not supported.
+	 */
+	private function convert_currency_to_iso( string $currency ): string {
+		$currency_map = array(
+			'977' => 'BAM',  // Bosnia and Herzegovina Convertible Mark.
+			'978' => 'EUR',  // Euro.
+			'840' => 'USD',  // US Dollar.
+			// Add other currencies as needed.
+		);
+
+		if ( isset( $currency_map[ $currency ] ) ) {
+			return $currency_map[ $currency ];
+		}
+
+		// If we received an ISO code already, verify it's supported.
+		$supported_currencies = array_values( $currency_map );
+		if ( in_array( $currency, $supported_currencies, true ) ) {
+			return $currency;
+		}
+
+		throw new NovaBankaIPGException(
+			sprintf( 'Unsupported currency: %s', $currency )
 		);
 	}
 

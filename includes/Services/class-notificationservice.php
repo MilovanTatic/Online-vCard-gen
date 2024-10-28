@@ -12,11 +12,9 @@
 namespace NovaBankaIPG\Services;
 
 use WC_Order;
-use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Utils\SharedUtilities;
-use NovaBankaIPG\Utils\Config;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use Exception;
 
@@ -26,13 +24,6 @@ use Exception;
  * Handles IPG payment notifications and processes order status updates.
  */
 class NotificationService {
-	/**
-	 * API Handler instance.
-	 *
-	 * @var APIHandler
-	 */
-	private $api_handler;
-
 	/**
 	 * Logger instance.
 	 *
@@ -50,16 +41,13 @@ class NotificationService {
 	/**
 	 * Constructor.
 	 *
-	 * @param APIHandler  $api_handler  API handler instance.
 	 * @param Logger      $logger       Logger instance.
 	 * @param DataHandler $data_handler Data handler instance.
 	 */
 	public function __construct(
-		APIHandler $api_handler,
 		Logger $logger,
 		DataHandler $data_handler
 	) {
-		$this->api_handler  = $api_handler;
 		$this->logger       = $logger;
 		$this->data_handler = $data_handler;
 	}
@@ -73,61 +61,27 @@ class NotificationService {
 	 */
 	public function handle_notification( array $notification_data ): void {
 		try {
-			// Allow plugins to modify notification data.
-			$notification_data = apply_filters( 'novabankaipg_before_notification_process', $notification_data );
-
-			// Verify message signature.
+			// 1. Verify signature
 			$this->verify_notification_signature( $notification_data );
-
-			// Log the notification if in debug mode.
-			if ( Config::is_debug_mode() ) {
-				$this->logger->debug( 'Notification received', array( 'notification_data' => $notification_data ) );
-			}
-
-			$order_id = $notification_data['paymentid'];
-			$order    = wc_get_order( $order_id );
-
-			if ( ! $order ) {
-				throw new NovaBankaIPGException( 'Order not found for ID: ' . esc_html( $order_id ) );
-			}
-
-			// Handle different notification statuses.
-			switch ( $notification_data['status'] ) {
-				case 'SUCCESS':
+			
+			// 2. Get and validate order
+			$order = $this->get_order_from_notification( $notification_data );
+			
+			// 3. Process notification based on result
+			switch ( $notification_data['result'] ) {
+				case 'CAPTURED':
 					$this->process_successful_payment( $order, $notification_data );
-					$this->logger->info( 'Payment notification processed successfully.', array( 'payment_id' => $notification_data['paymentid'] ) );
 					break;
 				case 'FAILED':
 					$this->process_failed_payment( $order, $notification_data );
-					$this->logger->error( 'Payment notification indicates a failure.', array( 'payment_id' => $notification_data['paymentid'] ) );
-					break;
-				case 'DECLINED':
-					$this->process_declined_payment( $order, $notification_data );
-					$this->logger->warning( 'Payment was declined.', array( 'payment_id' => $notification_data['paymentid'] ) );
 					break;
 				case 'CANCELLED':
 					$this->process_cancelled_payment( $order, $notification_data );
-					$this->logger->info( 'Payment was cancelled by the user.', array( 'payment_id' => $notification_data['paymentid'] ) );
 					break;
-				default:
-					$this->logger->warning(
-						'Unhandled payment status received in notification.',
-						array(
-							'payment_id' => $notification_data['paymentid'],
-							'status'     => $notification_data['status'],
-						)
-					);
-					throw new NovaBankaIPGException( 'Unhandled payment status received in notification.' );
 			}
 
-			/**
-			 * Action after notification processing.
-			 *
-			 * @since 1.0.1
-			 * @param WC_Order $order            The order being processed.
-			 * @param array    $notification_data The notification data.
-			 */
-			do_action( 'novabankaipg_after_notification_process', $order, $notification_data );
+			// 4. Store transaction data
+			$this->store_transaction_data( $order, $notification_data );
 
 		} catch ( Exception $e ) {
 			$this->logger->error(

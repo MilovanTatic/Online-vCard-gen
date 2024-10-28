@@ -128,55 +128,7 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	 * Initialize gateway settings form fields.
 	 */
 	public function init_form_fields(): void {
-		$this->form_fields = array(
-			'enabled'      => array(
-				'title'   => esc_html__( 'Enable/Disable', 'novabanka-ipg-gateway' ),
-				'type'    => 'checkbox',
-				'label'   => esc_html__( 'Enable NovaBanka IPG Payment Gateway', 'novabanka-ipg-gateway' ),
-				'default' => Config::get_setting( 'enabled', 'no' ),
-			),
-			'title'        => array(
-				'title'       => esc_html__( 'Title', 'novabanka-ipg-gateway' ),
-				'type'        => 'text',
-				'description' => esc_html__( 'The title the user sees during checkout.', 'novabanka-ipg-gateway' ),
-				'default'     => Config::get_setting( 'title', esc_html__( 'NovaBanka IPG', 'novabanka-ipg-gateway' ) ),
-				'desc_tip'    => true,
-			),
-			'description'  => array(
-				'title'       => esc_html__( 'Description', 'novabanka-ipg-gateway' ),
-				'type'        => 'textarea',
-				'description' => esc_html__( 'The description the user sees during checkout.', 'novabanka-ipg-gateway' ),
-				'default'     => Config::get_setting( 'description', esc_html__( 'Pay securely using NovaBanka IPG.', 'novabanka-ipg-gateway' ) ),
-			),
-			'test_mode'    => array(
-				'title'       => esc_html__( 'Test Mode', 'novabanka-ipg-gateway' ),
-				'type'        => 'checkbox',
-				'label'       => esc_html__( 'Enable Test Mode', 'novabanka-ipg-gateway' ),
-				'default'     => Config::get_setting( 'test_mode', 'yes' ),
-				'description' => esc_html__( 'Place the payment gateway in test mode to simulate transactions.', 'novabanka-ipg-gateway' ),
-			),
-			'api_endpoint' => array(
-				'title'       => esc_html__( 'API Endpoint', 'novabanka-ipg-gateway' ),
-				'type'        => 'text',
-				'description' => esc_html__( 'The API endpoint URL for the payment gateway.', 'novabanka-ipg-gateway' ),
-				'default'     => Config::get_setting( 'api_endpoint', '' ),
-				'desc_tip'    => true,
-			),
-			'terminal_id'  => array(
-				'title'       => esc_html__( 'Terminal ID', 'novabanka-ipg-gateway' ),
-				'type'        => 'text',
-				'description' => esc_html__( 'Your terminal ID provided by NovaBanka.', 'novabanka-ipg-gateway' ),
-				'default'     => Config::get_setting( 'terminal_id', '' ),
-				'desc_tip'    => true,
-			),
-			'secret_key'   => array(
-				'title'       => esc_html__( 'Secret Key', 'novabanka-ipg-gateway' ),
-				'type'        => 'password',
-				'description' => esc_html__( 'Your secret key provided by NovaBanka.', 'novabanka-ipg-gateway' ),
-				'default'     => Config::get_setting( 'secret_key', '' ),
-				'desc_tip'    => true,
-			),
-		);
+		$this->form_fields = Config::get_form_fields();
 	}
 
 	/**
@@ -189,38 +141,29 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 		try {
 			$order = wc_get_order( $order_id );
 
-			$this->log( 'Payment process initialized.', array( 'order_id' => $order_id ) );
+			$this->logger->info( 'Payment process initialized.', array( 'order_id' => $order_id ) );
 
 			// Check if the gateway is in test mode and log accordingly.
 			if ( Config::is_test_mode() ) {
 				$this->logger->info( 'Processing payment in test mode.', array( 'order_id' => $order_id ) );
 			}
 
+			// Prepare payment data
+			$payment_data = array(
+				'order_id' => $order_id,
+				'amount'   => $order->get_total(),
+				'currency' => $order->get_currency(),
+				'trackid'  => $order->get_order_key(),
+			);
+
 			// Use PaymentService to initialize the payment.
-			$response = $this->payment_service->initialize_payment( $order );
+			$response = $this->payment_service->initialize_payment( $order, $payment_data );
 
 			// Store payment ID and redirect user to the payment gateway.
 			$order->update_status(
 				'on-hold',
 				esc_html__( 'Awaiting payment gateway response.', 'novabanka-ipg-gateway' )
 			);
-
-			$this->logger->info(
-				'Payment process initialized.',
-				array(
-					'order_id' => $order_id,
-					'response' => $response,
-				)
-			);
-
-			/**
-			 * Filter payment response before returning.
-			 *
-			 * @since 1.0.1
-			 * @param array    $response Payment response data.
-			 * @param WC_Order $order    Order object.
-			 */
-			$response = apply_filters( 'novabankaipg_payment_response', $response, $order );
 
 			return array(
 				'result'   => 'success',
@@ -232,7 +175,7 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 				'Payment process failed.',
 				array(
 					'order_id' => $order_id,
-					'error'    => esc_html( $e->getMessage() ),
+					'error'    => $e->getMessage(),
 				)
 			);
 

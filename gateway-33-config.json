@@ -1,0 +1,336 @@
+{
+  "plugin": {
+    "name": "NovaBanka IPG33 Payment Gateway",
+    "version": "1.0.2",
+    "namespace": "NovaBankaIPG",
+    "main_file": "class-novabankaipg.php",
+    "description": "3D Secure payment gateway integration for WooCommerce",
+    "implementation_notes": {
+      "main_class": {
+        "file": "class-novabankaipg.php",
+        "reference": {
+          "current": {
+            "startLine": 1,
+            "endLine": 37
+          }
+        },
+        "improvements": {
+          "container": {
+            "description": "Implement proper dependency injection container",
+            "example": {
+              "code": [
+                "private function init_container(): void {",
+                "    $this->container = new Container();",
+                "    $this->container->singleton('logger', Logger::class);",
+                "    $this->container->singleton('config', Config::class);",
+                "    $this->container->singleton('api_handler', APIHandler::class);"
+              ]
+            }
+          },
+          "initialization": {
+            "description": "Add proper plugin activation/deactivation hooks",
+            "example": {
+              "code": [
+                "register_activation_hook(__FILE__, [$this, 'activate']);",
+                "register_deactivation_hook(__FILE__, [$this, 'deactivate']);"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "core_components": {
+      "gateway": {
+        "file": "includes/Core/class-novabankaipggateway.php",
+        "reference": {
+          "current": {
+            "startLine": 1,
+            "endLine": 185
+          }
+        },
+        "improvements": {
+          "blocks_support": {
+            "description": "Add WooCommerce Blocks support",
+            "example": {
+              "code": [
+                "public function get_payment_method_script_handles() {",
+                "    return ['novabankaipg-payment-method'];",
+                "}",
+                "",
+                "public function get_payment_method_data() {",
+                "    return [",
+                "        'title' => $this->get_title(),",
+                "        'description' => $this->get_description(),",
+                "        'supports' => ['products']",
+                "    ];",
+                "}"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "services": {
+      "payment_service": {
+        "file": "includes/Services/class-paymentservice.php",
+        "reference": {
+          "current": {
+            "startLine": 1,
+            "endLine": 51
+          }
+        },
+        "improvements": {
+          "transaction_handling": {
+            "description": "Add comprehensive transaction state management",
+            "example": {
+              "code": [
+                "private function handle_transaction_state(WC_Order $order, array $response): void {",
+                "    $state = new TransactionState($order, $response);",
+                "    $state->process();",
+                "    $state->update_order();",
+                "}"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "utils": {
+      "api_handler": {
+        "improvements": {
+          "retry_mechanism": {
+            "description": "Add proper retry mechanism for failed requests",
+            "example": {
+              "code": [
+                "private function request_with_retry(string $endpoint, array $data, int $retries = 3): array {",
+                "    for ($i = 0; $i < $retries; $i++) {",
+                "        try {",
+                "            return $this->make_request($endpoint, $data);",
+                "        } catch (APIException $e) {",
+                "            if ($i === $retries - 1) throw $e;",
+                "            sleep(pow(2, $i));",
+                "        }",
+                "    }",
+                "}"
+              ]
+            }
+          }
+        }
+      },
+      "logger": {
+        "improvements": {
+          "structured_logging": {
+            "description": "Implement structured logging with context",
+            "example": {
+              "code": [
+                "public function log(string $level, string $message, array $context = []): void {",
+                "    $data = [",
+                "        'timestamp' => time(),",
+                "        'level' => $level,",
+                "        'message' => $message,",
+                "        'context' => $this->sanitize_context($context)",
+                "    ];",
+                "    wc_get_logger()->log($level, json_encode($data));",
+                "}"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "future_development": {
+      "priority_high": [
+        {
+          "feature": "Block Checkout Integration",
+          "description": "Implement full WooCommerce Blocks compatibility",
+          "tasks": [
+            "Add payment method block registration",
+            "Implement payment method frontend components",
+            "Add block validation handlers"
+          ]
+        },
+        {
+          "feature": "Enhanced Error Handling",
+          "description": "Implement comprehensive error handling system",
+          "tasks": [
+            "Add detailed error logging",
+            "Implement user-friendly error messages",
+            "Add error recovery mechanisms"
+          ]
+        }
+      ],
+      "priority_medium": [
+        {
+          "feature": "Performance Optimization",
+          "description": "Optimize gateway performance",
+          "tasks": [
+            "Implement request caching",
+            "Add response optimization",
+            "Optimize database queries"
+          ]
+        }
+      ]
+    }
+  },
+  "directory_structure": {
+    "root": {
+      "main_plugin_file": {
+        "path": "class-novabankaipg.php",
+        "purpose": "Plugin bootstrap and initialization",
+        "responsibilities": [
+          "Define plugin constants",
+          "Load dependencies",
+          "Initialize core components",
+          "Register WooCommerce hooks"
+        ],
+        "reference": {
+          "file": "class-novabankaipg.php",
+          "startLine": 1,
+          "endLine": 37
+        }
+      }
+    },
+    "includes": {
+      "Core": {
+        "class-novabankaipggateway.php": {
+          "purpose": "Main gateway integration with WooCommerce",
+          "responsibilities": [
+            "Handle WooCommerce payment settings",
+            "Process payments",
+            "Manage refunds",
+            "Configure gateway options"
+          ],
+          "reference": {
+            "file": "includes/Core/class-novabankaipggateway.php",
+            "startLine": 1,
+            "endLine": 65
+          }
+        }
+      },
+      "Services": {
+        "class-paymentservice.php": {
+          "purpose": "Payment processing business logic",
+          "responsibilities": [
+            "Handle payment initialization",
+            "Process payment responses",
+            "Manage order status updates",
+            "Handle payment notifications"
+          ]
+        },
+        "class-notificationservice.php": {
+          "purpose": "Handle IPG notifications",
+          "responsibilities": [
+            "Process IPG callbacks",
+            "Verify notification signatures",
+            "Update order statuses",
+            "Store transaction data"
+          ]
+        }
+      },
+      "Utils": {
+        "class-apihandler.php": {
+          "purpose": "Handle API communication",
+          "responsibilities": [
+            "Make HTTP requests to IPG",
+            "Handle API responses",
+            "Manage request/response logging",
+            "Handle API errors"
+          ]
+        },
+        "class-logger.php": {
+          "purpose": "Logging functionality",
+          "responsibilities": [
+            "Log payment operations",
+            "Log errors and debugging info",
+            "Format log messages",
+            "Handle sensitive data redaction"
+          ]
+        },
+        "class-datahandler.php": {
+          "purpose": "Data processing and validation",
+          "responsibilities": [
+            "Validate payment data",
+            "Format amounts and currencies",
+            "Sanitize input data",
+            "Prepare API requests"
+          ]
+        },
+        "class-messagehandler.php": {
+          "purpose": "Message verification and processing",
+          "responsibilities": [
+            "Generate message verifiers",
+            "Verify message signatures",
+            "Format API messages",
+            "Handle error messages"
+          ]
+        },
+        "class-sharedutilities.php": {
+          "purpose": "Common utility functions",
+          "responsibilities": [
+            "Format amounts",
+            "Handle currency codes",
+            "Generate unique IDs",
+            "Common helper functions"
+          ]
+        },
+        "class-threedshandler.php": {
+          "purpose": "3D Secure processing",
+          "responsibilities": [
+            "Handle 3DS redirections",
+            "Process 3DS responses",
+            "Validate 3DS data",
+            "Manage 3DS state"
+          ]
+        },
+        "class-config.php": {
+          "purpose": "Configuration management",
+          "responsibilities": [
+            "Manage gateway settings",
+            "Handle environment configs",
+            "Store API credentials",
+            "Manage options"
+          ]
+        }
+      },
+      "Exceptions": {
+        "class-novabankaipgexception.php": {
+          "purpose": "Custom exception handling",
+          "responsibilities": [
+            "Define custom exceptions",
+            "Handle error messages",
+            "Provide error context",
+            "Format error responses"
+          ]
+        }
+      }
+    }
+  },
+  "hooks": {
+    "filters": {
+      "reference": {
+        "file": "developer-log.json",
+        "startLine": 223,
+        "endLine": 239
+      }
+    },
+    "actions": {
+      "reference": {
+        "file": "developer-log.json",
+        "startLine": 240,
+        "endLine": 255
+      }
+    }
+  },
+  "dependencies": {
+    "wordpress": ">=5.8",
+    "woocommerce": ">=5.0",
+    "php": ">=7.4"
+  },
+  "security": {
+    "reference": {
+      "file": "developer-log.json",
+      "startLine": 306,
+      "endLine": 312
+    }
+  }
+} 

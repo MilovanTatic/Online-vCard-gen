@@ -53,55 +53,71 @@ class SharedUtilities {
 	}
 
 	/**
-	 * Generate message verifier.
+	 * Generate message verifier for IPG requests.
 	 *
-	 * @param mixed ...$fields Fields to include in verifier.
+	 * Example from logs:
+	 * Input: PaymentInitRequest189110001test12341.00113YXKZPOQ9RRLGPDED5D3PC5BJ.
+	 * Output: Base64(SHA-256()).
+	 *
+	 * @param string $msg_name Message name (e.g., 'PaymentInitRequest').
+	 * @param string $version Version number.
+	 * @param string $terminal_id Terminal ID.
+	 * @param string $password Terminal password.
+	 * @param string $amount Transaction amount.
+	 * @param string $trackid Order tracking ID.
+	 * @param string $udf1 User defined field 1.
+	 * @param string $secret_key Secret key.
+	 * @param string $udf5 User defined field 5.
 	 * @return string
 	 */
-	public static function generate_message_verifier( ...$fields ): string {
-		// Direct concatenation without spaces between fields.
-		$message = implode( '', $fields );
+	public static function generate_message_verifier(
+		string $msg_name,
+		string $version,
+		string $terminal_id,
+		string $password,
+		string $amount,
+		string $trackid,
+		string $udf1 = '',
+		string $secret_key = '',
+		string $udf5 = ''
+	): string {
+		// Create message string exactly as IPG expects.
+		$message = $msg_name .
+					$version .
+					$terminal_id .
+					$password .
+					self::format_amount( $amount ) . // Use our format_amount method.
+					$trackid .
+					$udf1 .
+					$secret_key .
+					$udf5;
 
-		Logger::debug(
-			'Message verifier generation:',
-			array(
-				'initial_string' => $message,
-				'initial_hex'    => bin2hex( $message ),
-			)
-		);
-
-		// Remove all spaces.
+		// Remove any whitespace.
 		$message = preg_replace( '/\s+/', '', $message );
 
+		// Debug logging matching the example format.
 		Logger::debug(
-			'After space removal:',
+			'Message Verifier Base loaded',
 			array(
-				'processed_string' => $message,
-				'processed_hex'    => bin2hex( $message ),
+				'messageVerifierBase'        => $message,
+				'messageVerifierBase.length' => strlen( $message ),
 			)
 		);
 
-		// Get raw hash bytes.
-		$hash_bytes = hash( 'sha256', $message, true );
+		// Generate SHA-256 hash and encode in base64.
+		$hash   = hash( 'sha256', $message, true );
+		$base64 = base64_encode( $hash );
 
+		// Debug logging matching example format.
 		Logger::debug(
-			'Hash bytes:',
+			'REST client message verifier',
 			array(
-				'hex' => strtoupper( bin2hex( $hash_bytes ) ),
+				'SHA256(messageVerifierBase)' => strtoupper( bin2hex( $hash ) ),
+				'msgVerifier'                 => $base64,
 			)
 		);
 
-		// Base64 encode.
-		$verifier = base64_encode( $hash_bytes );
-
-		Logger::debug(
-			'Final verifier:',
-			array(
-				'verifier' => $verifier,
-			)
-		);
-
-		return $verifier;
+		return $base64;
 	}
 
 	/**
