@@ -23,7 +23,6 @@ use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Utils\ThreeDSHandler;
 use NovaBankaIPG\Services\PaymentService;
-use NovaBankaIPG\Services\NotificationService;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 
 /**
@@ -67,49 +66,57 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 
 	/**
 	 * Constructor.
-	 *
-	 * @param APIHandler     $api_handler    API handler instance.
-	 * @param Logger         $logger         Logger instance.
-	 * @param DataHandler    $data_handler   Data handler instance.
-	 * @param ThreeDSHandler $threeds_handler ThreeDS handler instance.
-	 * @param PaymentService $payment_service Payment service instance.
 	 */
-	public function __construct(
-		APIHandler $api_handler,
-		Logger $logger,
-		DataHandler $data_handler,
-		ThreeDSHandler $threeds_handler,
-		PaymentService $payment_service
-	) {
-		$this->api_handler     = $api_handler;
-		$this->logger          = $logger;
-		$this->data_handler    = $data_handler;
-		$this->threeds_handler = $threeds_handler;
-		$this->payment_service = $payment_service;
+	public function __construct() {
+		$this->id                 = 'novabankaipg';
+		$this->method_title       = __( 'NovaBanka IPG', 'novabanka-ipg-gateway' );
+		$this->method_description = __( 'NovaBanka IPG payment gateway integration', 'novabanka-ipg-gateway' );
+
+		// Initialize basic gateway settings.
+		$this->init_form_fields();
+		$this->init_settings();
+
+		// Initialize dependencies.
+		$this->init_dependencies();
+
+		// Set basic gateway properties.
+		$this->title       = $this->get_option( 'title' );
+		$this->description = $this->get_option( 'description' );
+		$this->enabled     = $this->get_option( 'enabled' );
+
+		// Add actions.
+		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
 	}
 
 	/**
 	 * Initialize dependencies.
 	 */
 	private function init_dependencies(): void {
-		$this->logger           = new Logger();
-			$this->data_handler = new DataHandler();
+		// Initialize logger first.
+		$this->logger       = new Logger();
+		$this->data_handler = new DataHandler();
 
+		// Get settings.
+		$settings = Config::get_all_settings();
+
+		// Initialize API handler.
 		$this->api_handler = new APIHandler(
-			Config::get_setting( 'api_endpoint' ),
-			Config::get_setting( 'terminal_id' ),
-			Config::get_setting( 'terminal_password' ),
-			Config::get_setting( 'secret_key' ),
+			$settings['api_endpoint'] ?? '',
+			$settings['terminal_id'] ?? '',
+			$settings['terminal_password'] ?? '',
+			$settings['secret_key'] ?? '',
 			$this->logger,
 			$this->data_handler,
-			Config::get_setting( 'test_mode', 'yes' )
+			$settings['test_mode'] ?? 'yes'
 		);
 
+		// Initialize 3DS handler.
 		$this->threeds_handler = new ThreeDSHandler(
 			$this->api_handler,
 			$this->logger
 		);
 
+		// Initialize payment service.
 		$this->payment_service = new PaymentService(
 			$this->api_handler,
 			$this->logger,
