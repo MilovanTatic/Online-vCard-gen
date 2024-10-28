@@ -356,4 +356,105 @@ class PaymentService {
 
 		return $data;
 	}
+
+	/**
+	 * Process the payment initialization response .
+	 *
+	 * @param array    $response The API response .
+	 * @param WC_Order $order    The order object .
+	 * @return array The processed response data .
+	 * @throws NovaBankaIPGException If response is invalid .
+	 */
+	private function process_payment_init_response( $response, WC_Order $order ): array {
+		if ( is_wp_error( $response ) ) {
+			$this->logger->error(
+				'Payment gateway connection failed',
+				array(
+					'order_id' => $order->get_id(),
+					'error'    => $response->get_error_message(),
+				)
+			);
+			throw new NovaBankaIPGException(
+				esc_html__( 'Unable to connect to payment gateway. Please try again.', 'novabanka-ipg-gateway' )
+			);
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
+
+		if ( empty( $data ) ) {
+			$this->logger->error(
+				'Invalid response format',
+				array(
+					'order_id' => $order->get_id(),
+					'response' => $body,
+				)
+			);
+			throw new NovaBankaIPGException(
+				esc_html__( 'Invalid response from payment gateway.', 'novabanka-ipg-gateway' )
+			);
+		}
+		// Check for error response .
+		if ( isset( $data['type'] ) && 'error' === $data['type'] ) {
+			$error_code = $data['errorCode'] ?? 'Unknown';
+			$error_desc = $data['errorDesc'] ?? 'Unknown error';
+
+			// Log the error with context .
+			$this->logger->error(
+				'Payment initialization failed',
+				array(
+					'order_id' => $order->get_id(),
+					'error'    => "IPG Error: {$error_code} - {$error_desc}",
+				)
+			);
+
+			$order->add_order_note(
+				sprintf(
+					/* translators: 1: Error code, 2: Error description */
+					esc_html__( 'Payment initialization failed: %1$s - %2$s', 'novabanka-ipg-gateway' ),
+					esc_html( $error_code ),
+					esc_html( $error_desc )
+				)
+			);
+
+			throw new NovaBankaIPGException(
+				sprintf(
+					/* translators: %s: Error description from payment gateway */
+					esc_html__( 'Payment gateway error: %s', 'novabanka-ipg-gateway' ),
+					esc_html( $error_desc )
+				)
+			);
+		}
+
+		// Verify required fields .
+		if ( empty( $data['browserRedirectionURL'] ) ) {
+			$this->logger->error(
+				'Missing redirect URL',
+				array(
+					'order_id' => $order->get_id(),
+					'response' => $data,
+				)
+			);
+			throw new NovaBankaIPGException(
+				esc_html__( 'Invalid gateway response: Missing redirect URL.', 'novabanka-ipg-gateway' )
+			);
+		}
+		// Store payment ID for future reference .
+		if ( ! empty( $data['paymentid'] ) ) {
+			// Store payment ID as order meta for tracking and reference .
+			$order->update_meta_data( '_novabanka_payment_id', sanitize_text_field( $data['paymentid'] ) );
+			$order->save();
+
+			// Log payment ID storage .
+			$this->logger->info(
+				'Payment ID stored',
+				array(
+					'order_id'   => $order->get_id(),
+					'payment_id' => $data['paymentid'],
+				)
+			);
+		}
+
+		return $data;
+	}
 }

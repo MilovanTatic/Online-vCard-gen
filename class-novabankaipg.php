@@ -128,7 +128,7 @@ class NovaBankaIPG {
 	 */
 	private function init_container(): void {
 		// Initialize basic utilities first.
-		$this->container['logger'] = new Logger();
+		$this->container['logger']       = new Logger();
 		$this->container['data_handler'] = new DataHandler();
 
 		// Get settings.
