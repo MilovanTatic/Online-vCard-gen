@@ -124,54 +124,44 @@ class NovaBankaIPG {
 	}
 
 	/**
-	 * Initialize service container.
+	 * Initialize container with all dependencies.
 	 */
 	private function init_container(): void {
-		// Initialize core services.
-		$this->container['logger']       = new Logger();
+		// Initialize basic utilities first.
+		$this->container['logger'] = new Logger();
 		$this->container['data_handler'] = new DataHandler();
 
-		// Get gateway settings.
+		// Get settings.
 		$settings = Config::get_all_settings();
-
-		// Initialize API handler with dependencies.
-		$this->container['api_handler'] = new APIHandler(
-			$settings['api_endpoint'] ?? '',
-			$settings['terminal_id'] ?? '',
-			$settings['terminal_password'] ?? '',
-			$settings['secret_key'] ?? '',
-			$this->container['logger'],
-			$this->container['data_handler'],
-			$settings['test_mode'] ?? 'yes'
-		);
 
 		// Initialize message handler.
 		$this->container['message_handler'] = new MessageHandler(
-			$settings['terminal_id'] ?? '',
-			$settings['terminal_password'] ?? '',
-			$settings['secret_key'] ?? '',
+			$settings['terminal_id'],
+			$settings['terminal_password'],
+			$settings['secret_key'],
 			$this->container['data_handler'],
 			$this->container['logger']
 		);
 
-		// Initialize 3DS handler.
-		$this->container['threeds_handler'] = new ThreeDSHandler(
-			$this->container['api_handler'],
+		// Initialize API handler (ONLY HTTP communication).
+		$this->container['api_handler'] = new APIHandler(
+			$settings['api_endpoint'],
 			$this->container['logger']
 		);
 
-		// Initialize payment service.
+		// Initialize payment service (Business logic).
 		$this->container['payment_service'] = new PaymentService(
 			$this->container['api_handler'],
-			$this->container['logger'],
-			$this->container['data_handler']
+			$this->container['message_handler'],
+			$this->container['data_handler'],
+			$this->container['logger']
 		);
 
 		// Initialize notification service.
 		$this->container['notification_service'] = new NotificationService(
-			$this->container['api_handler'],
-			$this->container['logger'],
-			$this->container['data_handler']
+			$this->container['message_handler'],
+			$this->container['data_handler'],
+			$this->container['logger']
 		);
 	}
 

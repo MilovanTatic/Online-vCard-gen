@@ -242,4 +242,28 @@ class MessageHandler {
 			);
 		}
 	}
+
+	/**
+	 * Generate message verifier.
+	 *
+	 * @param array $fields Fields to verify.
+	 * @return string Message verifier.
+	 */
+	public function generate_verifier( array $fields ): string {
+		return base64_encode(
+			hash( 'sha256', implode( '', $fields ), true )
+		);
+	}
+
+	/**
+	 * Verify message signature.
+	 *
+	 * @param array  $data      Message data.
+	 * @param string $signature Message signature to verify.
+	 * @return bool True if signature is valid.
+	 */
+	public function verify_signature( array $data, string $signature ): bool {
+		$verifier = $this->generate_verifier( $data );
+		return hash_equals( $verifier, $signature );
+	}
 }

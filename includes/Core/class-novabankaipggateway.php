@@ -23,6 +23,7 @@ use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Utils\ThreeDSHandler;
 use NovaBankaIPG\Services\PaymentService;
+use NovaBankaIPG\Services\NotificationService;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 
 /**
@@ -65,6 +66,13 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	protected $payment_service;
 
 	/**
+	 * Notification Service instance.
+	 *
+	 * @var NotificationService
+	 */
+	protected $notification_service;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -86,6 +94,9 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 
 		// Add actions.
 		add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
+
+		// Register notification endpoint.
+		$this->register_notification_endpoint();
 	}
 
 	/**
@@ -93,7 +104,9 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	 */
 	private function init_dependencies(): void {
 		// Initialize logger first.
-		$this->logger       = new Logger();
+		$this->logger = new Logger();
+
+		// Initialize data handler.
 		$this->data_handler = new DataHandler();
 
 		// Get settings.
@@ -101,19 +114,13 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 
 		// Initialize API handler.
 		$this->api_handler = new APIHandler(
-			$settings['api_endpoint'] ?? '',
-			$settings['terminal_id'] ?? '',
-			$settings['terminal_password'] ?? '',
-			$settings['secret_key'] ?? '',
+			$settings['api_endpoint'],
+			$settings['terminal_id'],
+			$settings['terminal_password'],
+			$settings['secret_key'],
 			$this->logger,
 			$this->data_handler,
 			$settings['test_mode'] ?? 'yes'
-		);
-
-		// Initialize 3DS handler.
-		$this->threeds_handler = new ThreeDSHandler(
-			$this->api_handler,
-			$this->logger
 		);
 
 		// Initialize payment service.
@@ -121,6 +128,18 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 			$this->api_handler,
 			$this->logger,
 			$this->data_handler
+		);
+
+		// Initialize notification service with correct dependencies.
+		$this->notification_service = new NotificationService(
+			$this->logger,      // Pass Logger instance first
+			$this->data_handler // Pass DataHandler instance second
+		);
+
+		// Initialize 3DS handler.
+		$this->threeds_handler = new ThreeDSHandler(
+			$this->api_handler,
+			$this->logger
 		);
 	}
 
@@ -132,37 +151,39 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 	}
 
 	/**
-	 * Process the payment for an order.
+	 * Process the payment.
 	 *
 	 * @param int $order_id Order ID.
-	 * @return array Payment result data.
+	 * @return array
+	 * @throws NovaBankaIPGException When payment processing fails.
 	 */
-	public function process_payment( $order_id ): array {
+	public function process_payment( int $order_id ): array {
 		try {
 			$order = wc_get_order( $order_id );
-
-			$this->logger->info( 'Payment process initialized.', array( 'order_id' => $order_id ) );
-
-			// Check if the gateway is in test mode and log accordingly.
-			if ( Config::is_test_mode() ) {
-				$this->logger->info( 'Processing payment in test mode.', array( 'order_id' => $order_id ) );
+			if ( ! $order ) {
+				throw new NovaBankaIPGException( esc_html__( 'Invalid order ID.', 'novabanka-ipg-gateway' ) );
 			}
 
-			// Prepare payment data
+			// Prepare payment data.
 			$payment_data = array(
 				'order_id' => $order_id,
 				'amount'   => $order->get_total(),
 				'currency' => $order->get_currency(),
 				'trackid'  => $order->get_order_key(),
+				'langid'   => substr( get_locale(), 0, 2 ),
+				'email'    => $order->get_billing_email(),
 			);
 
-			// Use PaymentService to initialize the payment.
+			// Allow plugins to modify payment data.
+			$payment_data = apply_filters( 'novabankaipg_payment_data', $payment_data, $order );
+
+			// Initialize payment through PaymentService.
 			$response = $this->payment_service->initialize_payment( $order, $payment_data );
 
-			// Store payment ID and redirect user to the payment gateway.
+			// Update order status.
 			$order->update_status(
 				'on-hold',
-				esc_html__( 'Awaiting payment gateway response.', 'novabanka-ipg-gateway' )
+				esc_html__( 'Awaiting payment confirmation from NovaBanka IPG.', 'novabanka-ipg-gateway' )
 			);
 
 			return array(
@@ -170,23 +191,16 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 				'redirect' => $response['browserRedirectionURL'],
 			);
 
-		} catch ( NovaBankaIPGException $e ) {
+		} catch ( Exception $e ) {
 			$this->logger->error(
-				'Payment process failed.',
+				'Payment processing failed.',
 				array(
 					'order_id' => $order_id,
-					'error'    => $e->getMessage(),
+					'error'    => esc_html( $e->getMessage() ),
 				)
 			);
 
-			wc_add_notice(
-				esc_html__( 'Payment error: ', 'novabanka-ipg-gateway' ) . esc_html( $e->getMessage() ),
-				'error'
-			);
-
-			return array(
-				'result' => 'failure',
-			);
+			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
 		}
 	}
 
@@ -201,5 +215,59 @@ class NovaBankaIPGGateway extends WC_Payment_Gateway {
 		if ( $this->logger ) {
 			$this->logger->{$level}( $message, $context );
 		}
+	}
+
+	/**
+	 * Handle IPG notification.
+	 *
+	 * @param array $notification_data Notification data from IPG.
+	 * @return void
+	 */
+	public function handle_notification( array $notification_data ): void {
+		try {
+			// Let NotificationService handle the notification.
+			$this->notification_service->handle_notification( $notification_data );
+
+		} catch ( Exception $e ) {
+			$this->logger->error(
+				'Notification handling failed.',
+				array(
+					'error' => $e->getMessage(),
+					'data'  => $this->data_handler->redact_sensitive_data( $notification_data ),
+				)
+			);
+
+			wp_send_json_error(
+				array(
+					'message' => esc_html__( 'Notification processing failed.', 'novabanka-ipg-gateway' ),
+				)
+			);
+		}
+	}
+
+	/**
+	 * Register notification endpoint.
+	 */
+	private function register_notification_endpoint(): void {
+		add_action( 'woocommerce_api_novabankaipg', array( $this, 'process_notification' ) );
+	}
+
+	/**
+	 * Process IPG notification.
+	 */
+	public function process_notification(): void {
+		$raw_post          = file_get_contents( 'php://input' );
+		$notification_data = json_decode( $raw_post, true );
+
+		if ( empty( $notification_data ) ) {
+			wp_send_json_error(
+				array(
+					'message' => esc_html__( 'Invalid notification data.', 'novabanka-ipg-gateway' ),
+				)
+			);
+			return;
+		}
+
+		$this->handle_notification( $notification_data );
 	}
 }

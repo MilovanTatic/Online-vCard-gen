@@ -11,8 +11,8 @@
 
 namespace NovaBankaIPG\Utils;
 
-if (!defined('ABSPATH')) {
-    exit;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
 }
 
 /**
@@ -34,38 +34,38 @@ class Config {
 	 * @var array
 	 */
 	private const DEFAULT_SETTINGS = array(
-		'enabled'             => 'no',
-		'test_mode'          => 'yes',
-		'debug'              => 'no',
-		'title'              => 'NovaBanka IPG',
-		'description'        => 'Pay securely using NovaBanka IPG.',
-		
+		'enabled'                => 'no',
+		'test_mode'              => 'yes',
+		'debug'                  => 'no',
+		'title'                  => 'NovaBanka IPG',
+		'description'            => 'Pay securely using NovaBanka IPG.',
+
 		// Test mode settings
-		'test_api_endpoint'  => 'https://ipgtest.novabanka.com/IPGWeb/servlet/PaymentInitRequest',
-		'test_terminal_id'   => '',
+		'test_api_endpoint'      => 'https://ipgtest.novabanka.com/IPGWeb/servlet/PaymentInitRequest',
+		'test_terminal_id'       => '',
 		'test_terminal_password' => '',
-		'test_secret_key'    => '',
-		
+		'test_secret_key'        => '',
+
 		// Production mode settings
-		'live_api_endpoint'  => 'https://ipg.novabanka.com/IPGWeb/servlet/PaymentInitRequest',
-		'live_terminal_id'   => '',
+		'live_api_endpoint'      => 'https://ipg.novabanka.com/IPGWeb/servlet/PaymentInitRequest',
+		'live_terminal_id'       => '',
 		'live_terminal_password' => '',
-		'live_secret_key'    => '',
-		
+		'live_secret_key'        => '',
+
 		// Action settings
-		'action'             => '1', // 1 = PURCHASE, 4 = AUTHORIZATION
-		
+		'action'                 => '1', // 1 = PURCHASE, 4 = AUTHORIZATION
+
 		// Response URLs
-		'response_url'       => '',  // Will be dynamically set
-		'error_url'         => '',   // Will be dynamically set
-		
+		'response_url'           => '',  // Will be dynamically set
+		'error_url'              => '',   // Will be dynamically set
+
 		// Language settings
-		'langid'            => 'EN',
-		
+		'langid'                 => 'EN',
+
 		// 3DS settings
-		'threeds_enabled'    => 'yes',
-		'threeds_auth_method' => '02',
-		'threeds_prior_auth' => '01',
+		'threeds_enabled'        => 'yes',
+		'threeds_auth_method'    => '02',
+		'threeds_prior_auth'     => '01',
 	);
 
 	/**
@@ -258,63 +258,63 @@ class Config {
 
 	public static function get_form_fields(): array {
 		return array(
-			'enabled' => array(
-				'title'   => __('Enable/Disable', 'novabanka-ipg-gateway'),
+			'enabled'                => array(
+				'title'   => __( 'Enable/Disable', 'novabanka-ipg-gateway' ),
 				'type'    => 'checkbox',
-				'label'   => __('Enable NovaBanka IPG Gateway', 'novabanka-ipg-gateway'),
-				'default' => self::DEFAULT_SETTINGS['enabled']
+				'label'   => __( 'Enable NovaBanka IPG Gateway', 'novabanka-ipg-gateway' ),
+				'default' => self::DEFAULT_SETTINGS['enabled'],
 			),
 			// Test Mode
-			'test_mode' => array(
-				'title'       => __('Test Mode', 'novabanka-ipg-gateway'),
+			'test_mode'              => array(
+				'title'       => __( 'Test Mode', 'novabanka-ipg-gateway' ),
 				'type'        => 'checkbox',
-				'label'       => __('Enable Test Mode', 'novabanka-ipg-gateway'),
+				'label'       => __( 'Enable Test Mode', 'novabanka-ipg-gateway' ),
 				'default'     => self::DEFAULT_SETTINGS['test_mode'],
-				'description' => __('Place the payment gateway in test mode.', 'novabanka-ipg-gateway')
+				'description' => __( 'Place the payment gateway in test mode.', 'novabanka-ipg-gateway' ),
 			),
 			// Test Credentials
-			'test_terminal_id' => array(
-				'title'       => __('Test Terminal ID', 'novabanka-ipg-gateway'),
+			'test_terminal_id'       => array(
+				'title'       => __( 'Test Terminal ID', 'novabanka-ipg-gateway' ),
 				'type'        => 'text',
-				'description' => __('Your test terminal ID from NovaBanka.', 'novabanka-ipg-gateway'),
+				'description' => __( 'Your test terminal ID from NovaBanka.', 'novabanka-ipg-gateway' ),
 				'default'     => self::DEFAULT_SETTINGS['test_terminal_id'],
-				'desc_tip'    => true
+				'desc_tip'    => true,
 			),
 			'test_terminal_password' => array(
-				'title'       => __('Test Terminal Password', 'novabanka-ipg-gateway'),
+				'title'       => __( 'Test Terminal Password', 'novabanka-ipg-gateway' ),
 				'type'        => 'password',
-				'description' => __('Your test terminal password from NovaBanka.', 'novabanka-ipg-gateway'),
+				'description' => __( 'Your test terminal password from NovaBanka.', 'novabanka-ipg-gateway' ),
 				'default'     => self::DEFAULT_SETTINGS['test_terminal_password'],
-				'desc_tip'    => true
+				'desc_tip'    => true,
 			),
-			'test_secret_key' => array(
-				'title'       => __('Test Secret Key', 'novabanka-ipg-gateway'),
+			'test_secret_key'        => array(
+				'title'       => __( 'Test Secret Key', 'novabanka-ipg-gateway' ),
 				'type'        => 'password',
-				'description' => __('Your test secret key from NovaBanka.', 'novabanka-ipg-gateway'),
+				'description' => __( 'Your test secret key from NovaBanka.', 'novabanka-ipg-gateway' ),
 				'default'     => self::DEFAULT_SETTINGS['test_secret_key'],
-				'desc_tip'    => true
+				'desc_tip'    => true,
 			),
 			// Live Credentials
-			'live_terminal_id' => array(
-				'title'       => __('Live Terminal ID', 'novabanka-ipg-gateway'),
+			'live_terminal_id'       => array(
+				'title'       => __( 'Live Terminal ID', 'novabanka-ipg-gateway' ),
 				'type'        => 'text',
-				'description' => __('Your live terminal ID from NovaBanka.', 'novabanka-ipg-gateway'),
+				'description' => __( 'Your live terminal ID from NovaBanka.', 'novabanka-ipg-gateway' ),
 				'default'     => self::DEFAULT_SETTINGS['live_terminal_id'],
-				'desc_tip'    => true
+				'desc_tip'    => true,
 			),
 			'live_terminal_password' => array(
-				'title'       => __('Live Terminal Password', 'novabanka-ipg-gateway'),
+				'title'       => __( 'Live Terminal Password', 'novabanka-ipg-gateway' ),
 				'type'        => 'password',
-				'description' => __('Your live terminal password from NovaBanka.', 'novabanka-ipg-gateway'),
+				'description' => __( 'Your live terminal password from NovaBanka.', 'novabanka-ipg-gateway' ),
 				'default'     => self::DEFAULT_SETTINGS['live_terminal_password'],
-				'desc_tip'    => true
+				'desc_tip'    => true,
 			),
-			'live_secret_key' => array(
-				'title'       => __('Live Secret Key', 'novabanka-ipg-gateway'),
+			'live_secret_key'        => array(
+				'title'       => __( 'Live Secret Key', 'novabanka-ipg-gateway' ),
 				'type'        => 'password',
-				'description' => __('Your live secret key from NovaBanka.', 'novabanka-ipg-gateway'),
+				'description' => __( 'Your live secret key from NovaBanka.', 'novabanka-ipg-gateway' ),
 				'default'     => self::DEFAULT_SETTINGS['live_secret_key'],
-				'desc_tip'    => true
+				'desc_tip'    => true,
 			),
 		);
 	}

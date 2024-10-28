@@ -61,13 +61,21 @@ class NotificationService {
 	 */
 	public function handle_notification( array $notification_data ): void {
 		try {
-			// 1. Verify signature
+			// Verify nonce for security purposes.
+			if ( ! check_ajax_referer( 'novabankaipg-nonce', 'nonce', false ) ) {
+				throw new NovaBankaIPGException( 'Invalid security nonce.' );
+			}
+
+			// Sanitize incoming data for security.
+			$notification_data = $this->sanitize_notification_data( $notification_data );
+
+			// Verify message signature for authenticity.
 			$this->verify_notification_signature( $notification_data );
-			
-			// 2. Get and validate order
+
+			// Get and validate order details.
 			$order = $this->get_order_from_notification( $notification_data );
-			
-			// 3. Process notification based on result
+
+			// Process notification based on payment result.
 			switch ( $notification_data['result'] ) {
 				case 'CAPTURED':
 					$this->process_successful_payment( $order, $notification_data );
@@ -78,17 +86,28 @@ class NotificationService {
 				case 'CANCELLED':
 					$this->process_cancelled_payment( $order, $notification_data );
 					break;
+				default:
+					throw new NovaBankaIPGException( 'Invalid notification result.' );
 			}
 
-			// 4. Store transaction data
+			// Store transaction data for future reference.
 			$this->store_transaction_data( $order, $notification_data );
+
+			/**
+			 * Action after notification processing.
+			 *
+			 * @since 1.0.1
+			 * @param WC_Order $order The order being processed.
+			 * @param array $notification_data The notification data.
+			 */
+			do_action( 'novabankaipg_after_notification', $order, $notification_data );
 
 		} catch ( Exception $e ) {
 			$this->logger->error(
 				'Notification handling failed.',
 				array(
 					'error'             => esc_html( $e->getMessage() ),
-					'notification_data' => $notification_data,
+					'notification_data' => $this->data_handler->redact_sensitive_data( $notification_data ),
 				)
 			);
 			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
@@ -253,5 +272,23 @@ class NotificationService {
 		if ( ! hash_equals( $calculated_verifier, $notification_data['msgVerifier'] ) ) {
 			throw new NovaBankaIPGException( 'Invalid notification message signature.' );
 		}
+	}
+
+	/**
+	 * Sanitize notification data.
+	 *
+	 * @param array $data Raw notification data.
+	 * @return array Sanitized data.
+	 */
+	private function sanitize_notification_data( array $data ): array {
+		$sanitized = array();
+		foreach ( $data as $key => $value ) {
+			if ( is_array( $value ) ) {
+				$sanitized[ sanitize_key( $key ) ] = $this->sanitize_notification_data( $value );
+			} else {
+				$sanitized[ sanitize_key( $key ) ] = sanitize_text_field( $value );
+			}
+		}
+		return $sanitized;
 	}
 }
