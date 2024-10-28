@@ -2,8 +2,8 @@
 /**
  * APIHandler Utility Class
  *
- * This class is responsible for managing HTTP communication with the NovaBanka IPG API.
- * It abstracts all the API requests and responses, focusing only on interactions with the IPG endpoints.
+ * Handles HTTP communication with the NovaBanka IPG API according to integration guide.
+ * Manages request/response formatting, message verification, and error handling.
  *
  * @package NovaBankaIPG\Utils
  * @since 1.0.1
@@ -11,9 +11,6 @@
 
 namespace NovaBankaIPG\Utils;
 
-use NovaBankaIPG\Interfaces\APIHandlerInterface;
-use NovaBankaIPG\Interfaces\LoggerInterface;
-use NovaBankaIPG\Interfaces\DataHandlerInterface;
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WP_Error;
 
@@ -21,12 +18,8 @@ use WP_Error;
  * Class APIHandler
  *
  * Handles API communication with the NovaBanka IPG payment gateway.
- * Implements APIHandlerInterface for standardized API operations.
- *
- * @package NovaBankaIPG\Utils
- * @since 1.0.1
  */
-class APIHandler implements APIHandlerInterface {
+class APIHandler {
 	/**
 	 * API endpoint URL.
 	 *
@@ -58,14 +51,14 @@ class APIHandler implements APIHandlerInterface {
 	/**
 	 * Logger instance.
 	 *
-	 * @var LoggerInterface
+	 * @var Logger
 	 */
 	private $logger;
 
 	/**
 	 * Data handler instance.
 	 *
-	 * @var DataHandlerInterface
+	 * @var DataHandler
 	 */
 	private $data_handler;
 
@@ -77,23 +70,23 @@ class APIHandler implements APIHandlerInterface {
 	private $test_mode;
 
 	/**
-	 * Constructor for the APIHandler class.
+	 * Constructor.
 	 *
-	 * @param string               $api_endpoint      API endpoint URL.
-	 * @param string               $terminal_id       Terminal ID.
-	 * @param string               $terminal_password Terminal password.
-	 * @param string               $secret_key        Secret key.
-	 * @param LoggerInterface      $logger           Logger instance.
-	 * @param DataHandlerInterface $data_handler     Data handler instance.
-	 * @param string               $test_mode        Test mode flag.
+	 * @param string      $api_endpoint      API endpoint URL.
+	 * @param string      $terminal_id       Terminal ID.
+	 * @param string      $terminal_password Terminal password.
+	 * @param string      $secret_key        Secret key.
+	 * @param Logger      $logger            Logger instance.
+	 * @param DataHandler $data_handler      Data handler instance.
+	 * @param string      $test_mode         Test mode flag.
 	 */
 	public function __construct(
 		string $api_endpoint,
 		string $terminal_id,
 		string $terminal_password,
 		string $secret_key,
-		LoggerInterface $logger,
-		DataHandlerInterface $data_handler,
+		Logger $logger,
+		DataHandler $data_handler,
 		string $test_mode = 'yes'
 	) {
 		$this->api_endpoint      = $api_endpoint;
@@ -106,155 +99,180 @@ class APIHandler implements APIHandlerInterface {
 	}
 
 	/**
-	 * Send payment initialization request to the IPG API.
+	 * Send payment initialization request to IPG.
 	 *
-	 * @param array $data The data for initializing payment.
-	 * @return array The response from the IPG API.
-	 * @throws NovaBankaIPGException If the request fails or returns an error.
+	 * @param array $data Payment initialization data.
+	 * @return array Response from IPG.
+	 * @throws NovaBankaIPGException When request fails.
 	 */
-	public function send_payment_init( array $data ): array {
-		$this->logger->debug( 'Initializing payment request', array( 'request_data' => $data ) );
-
+	public function send_payment_init_request( array $data ): array {
 		try {
-			SharedUtilities::validate_required_fields( $data, array( 'amount', 'currency', 'order_id' ) );
+			// Allow plugins to modify request data.
+			$data = apply_filters( 'novabankaipg_before_payment_init', $data );
 
-			$endpoint     = SharedUtilities::get_api_endpoint( '/payment-init' );
-			$request_data = $this->prepare_request_data( $data );
+			// Prepare request according to IPG guide.
+			$request_data = array(
+				'msgName'      => 'PaymentInitRequest',
+				'version'      => '1',
+				'id'           => $this->terminal_id,
+				'password'     => $this->terminal_password,
+				'action'       => '1',
+				'amt'          => $this->data_handler->format_amount( $data['amount'] ),
+				'currencycode' => $this->data_handler->get_currency_code( $data['currency'] ),
+				'trackid'      => $data['order_id'],
+				'responseURL'  => $data['responseURL'],
+				'errorURL'     => $data['errorURL'],
+				'langid'       => $data['langid'] ?? 'EN',
+			);
+
+			// Add message verifier.
+			$request_data['msgVerifier'] = SharedUtilities::generate_message_verifier(
+				$request_data['msgName'],
+				$request_data['version'],
+				$request_data['id'],
+				$request_data['password'],
+				$request_data['amt'],
+				$request_data['trackid'],
+				$data['udf1'] ?? '',
+				$this->secret_key,
+				$data['udf5'] ?? ''
+			);
 
 			$this->logger->debug(
-				'Sending payment request',
+				'Sending payment init request',
 				array(
-					'endpoint'     => $endpoint,
-					'request_data' => $request_data,
+					'request' => $this->redact_sensitive_data( $request_data ),
 				)
 			);
 
-			$response = $this->make_request( $endpoint, $request_data );
+			// Send request to IPG.
+			$response = $this->make_request( '/payment-init', $request_data );
 
-			$this->logger->debug( 'Payment request successful', array( 'response' => $response ) );
-			return $response;
+			// Verify response signature.
+			$this->verify_response_signature( $response );
 
-		} catch ( NovaBankaIPGException $e ) {
+			// Allow plugins to modify response.
+			return apply_filters( 'novabankaipg_after_payment_init', $response, $data );
+
+		} catch ( \Exception $e ) {
 			$this->logger->error(
-				'Payment initialization failed',
+				'Payment init request failed',
 				array(
-					'error'        => $e->getMessage(),
-					'request_data' => $data,
+					'error' => esc_html( $e->getMessage() ),
+					'data'  => $this->redact_sensitive_data( $data ),
 				)
 			);
-			throw $e;
+			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
 		}
 	}
 
 	/**
-	 * Send refund request to the IPG API.
+	 * Send refund request to IPG.
 	 *
-	 * @param array $refund_data The data for processing a refund.
-	 * @return array The response from the IPG API.
-	 * @throws NovaBankaIPGException If the request fails or returns an error.
+	 * @param array $refund_data Refund request data.
+	 * @return array Response from IPG.
+	 * @throws NovaBankaIPGException When request fails.
 	 */
-	public function process_refund( array $refund_data ) {
-		// Validate required fields.
-		SharedUtilities::validate_required_fields( $refund_data, array( 'amount', 'order_id' ) );
+	public function send_refund_request( array $refund_data ): array {
+		try {
+			// Allow plugins to modify refund data.
+			$refund_data = apply_filters( 'novabankaipg_before_refund_request', $refund_data );
 
-		$endpoint = SharedUtilities::get_api_endpoint( '/refund' );
+			// Prepare refund request according to IPG guide.
+			$request_data = array(
+				'msgName'  => 'RefundRequest',
+				'version'  => '1',
+				'id'       => $this->terminal_id,
+				'password' => $this->terminal_password,
+				'action'   => '2', // 2 = Refund.
+				'amt'      => $this->data_handler->format_amount( $refund_data['amount'] ),
+				'trackid'  => $refund_data['order_id'],
+				'udf1'     => $refund_data['reason'],
+			);
+
+			// Add message verifier.
+			$request_data['msgVerifier'] = SharedUtilities::generate_message_verifier(
+				$request_data['msgName'],
+				$request_data['version'],
+				$request_data['id'],
+				$request_data['password'],
+				$request_data['amt'],
+				$request_data['trackid'],
+				$request_data['udf1'],
+				$this->secret_key
+			);
+
+			$this->logger->debug(
+				'Sending refund request',
+				array(
+					'request' => $this->redact_sensitive_data( $request_data ),
+				)
+			);
+
+			// Send request to IPG.
+			$response = $this->make_request( '/refund', $request_data );
+
+			// Verify response signature.
+			$this->verify_response_signature( $response );
+
+			// Allow plugins to modify response.
+			return apply_filters( 'novabankaipg_after_refund_request', $response, $refund_data );
+
+		} catch ( \Exception $e ) {
+			$this->logger->error(
+				'Refund request failed',
+				array(
+					'error' => esc_html( $e->getMessage() ),
+					'data'  => $this->redact_sensitive_data( $refund_data ),
+				)
+			);
+			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
+		}
+	}
+
+	/**
+	 * Make HTTP request to IPG.
+	 *
+	 * @param string $endpoint API endpoint path.
+	 * @param array  $data     Request data.
+	 * @return array Response data.
+	 * @throws NovaBankaIPGException When request fails.
+	 */
+	private function make_request( string $endpoint, array $data ): array {
+		$url = rtrim( $this->api_endpoint, '/' ) . '/' . ltrim( $endpoint, '/' );
 
 		$response = wp_remote_post(
-			$endpoint,
+			$url,
 			array(
-				'body'    => json_encode( $refund_data ),
-				'headers' => array(
-					'Content-Type' => 'application/json',
+				'body'      => wp_json_encode( $data ),
+				'headers'   => array(
+					'Content-Type'  => 'application/json',
+					'X-Terminal-ID' => $this->terminal_id,
+					'X-Test-Mode'   => $this->test_mode,
 				),
+				'timeout'   => 30,
+				'sslverify' => true,
 			)
 		);
 
-		return $this->handle_response( $response );
-	}
-
-	/**
-	 * Verify payment notification from the IPG.
-	 *
-	 * @param array $notification The data received from IPG to verify.
-	 * @return bool True if notification verification is successful.
-	 * @throws NovaBankaIPGException If the verification fails.
-	 */
-	public function verify_notification( array $notification ): bool {
-		$this->logger->debug( 'Verifying notification', array( 'notification' => $notification ) );
-
-		try {
-			SharedUtilities::validate_required_fields( $notification, array( 'msgVerifier' ) );
-
-			$expected_signature = SharedUtilities::generate_message_verifier(
-				...array_values( $notification )
-			);
-
-			$is_valid = hash_equals( $expected_signature, $notification['msgVerifier'] );
-
-			$this->logger->debug(
-				'Notification verification result',
-				array(
-					'is_valid'     => $is_valid,
-					'notification' => $notification,
-				)
-			);
-
-			return $is_valid;
-
-		} catch ( NovaBankaIPGException $e ) {
-			$this->logger->error(
-				'Notification verification failed',
-				array(
-					'error'        => $e->getMessage(),
-					'notification' => $notification,
-				)
-			);
-			throw $e;
-		}
-	}
-
-	/**
-	 * Handle the response from an API request.
-	 *
-	 * @param array|WP_Error $response The response from wp_remote_post or wp_remote_get.
-	 * @return array The decoded response body.
-	 * @throws NovaBankaIPGException If the response contains errors.
-	 */
-	private function handle_response( $response ) {
 		if ( is_wp_error( $response ) ) {
-			$this->logger->error(
-				'API request failed',
-				array(
-					'error'      => $response->get_error_message(),
-					'error_code' => $response->get_error_code(),
+			throw new NovaBankaIPGException(
+				sprintf(
+					/* translators: %s: error message */
+					esc_html__( 'API request failed: %s', 'novabanka-ipg-gateway' ),
+					esc_html( $response->get_error_message() )
 				)
 			);
-			throw new NovaBankaIPGException( 'API request failed: ' . esc_html( $response->get_error_message() ) );
 		}
 
 		$response_code = wp_remote_retrieve_response_code( $response );
 		$response_body = json_decode( wp_remote_retrieve_body( $response ), true );
 
-		$this->logger->debug(
-			'API response received',
-			array(
-				'code'    => $response_code,
-				'body'    => $response_body,
-				'headers' => wp_remote_retrieve_headers( $response ),
-			)
-		);
-
 		if ( $response_code < 200 || $response_code >= 300 ) {
-			$this->logger->error(
-				'API error response',
-				array(
-					'code' => $response_code,
-					'body' => $response_body,
-				)
-			);
 			throw new NovaBankaIPGException(
 				sprintf(
-					'API request failed with code %d: %s',
+					/* translators: %1$d: response code, %2$s: response body */
+					esc_html__( 'API request failed with code %1$d: %2$s', 'novabanka-ipg-gateway' ),
 					esc_html( $response_code ),
 					esc_html( wp_json_encode( $response_body ) )
 				)
@@ -265,97 +283,45 @@ class APIHandler implements APIHandlerInterface {
 	}
 
 	/**
-	 * Generate notification response
+	 * Verify response signature from IPG.
 	 *
-	 * @param string $payment_id  Payment ID.
-	 * @param string $redirect_url Redirect URL.
-	 * @return array
+	 * @param array $response Response data to verify.
+	 * @throws NovaBankaIPGException When signature verification fails.
 	 */
-	public function generate_notification_response( string $payment_id, string $redirect_url ): array {
-		$this->logger->debug(
-			'Generating notification response',
-			array(
-				'payment_id'   => $payment_id,
-				'redirect_url' => $redirect_url,
-			)
+	private function verify_response_signature( array $response ): void {
+		if ( empty( $response['msgVerifier'] ) ) {
+			throw new NovaBankaIPGException( esc_html__( 'Missing message verifier in response.', 'novabanka-ipg-gateway' ) );
+		}
+
+		$verifier_fields = array(
+			$response['msgName'],
+			$response['version'],
+			$response['id'] ?? '',
+			$response['amt'] ?? '',
+			$response['trackid'] ?? '',
+			$this->secret_key,
 		);
 
-		$response = array(
-			'paymentId'   => $payment_id,
-			'redirectUrl' => $redirect_url,
-			'timestamp'   => time(),
-			'msgVerifier' => SharedUtilities::generate_message_verifier( $payment_id, $redirect_url ),
-		);
+		$calculated_verifier = SharedUtilities::generate_message_verifier( ...$verifier_fields );
 
-		$this->logger->debug( 'Generated notification response', array( 'response' => $response ) );
-		return $response;
+		if ( ! hash_equals( $calculated_verifier, $response['msgVerifier'] ) ) {
+			throw new NovaBankaIPGException( esc_html__( 'Invalid response signature.', 'novabanka-ipg-gateway' ) );
+		}
 	}
 
 	/**
-	 * Set API configuration
+	 * Redact sensitive data for logging.
 	 *
-	 * @param array $config API configuration.
-	 * @return void
+	 * @param array $data Data to redact.
+	 * @return array Redacted data.
 	 */
-	public function set_config( array $config ): void {
-		$this->logger->debug( 'Updating API configuration', array( 'new_config' => $config ) );
-
-		$this->api_endpoint      = $config['api_endpoint'] ?? $this->api_endpoint;
-		$this->terminal_id       = $config['terminal_id'] ?? $this->terminal_id;
-		$this->terminal_password = $config['terminal_password'] ?? $this->terminal_password;
-		$this->secret_key        = $config['secret_key'] ?? $this->secret_key;
-		$this->test_mode         = $config['test_mode'] ?? $this->test_mode;
-
-		$this->logger->debug( 'API configuration updated' );
-	}
-
-	/**
-	 * Prepare request data
-	 *
-	 * @param array $data Request data.
-	 * @return array
-	 */
-	private function prepare_request_data( array $data ): array {
-		return array_merge(
-			$data,
-			array(
-				'terminal_id' => $this->terminal_id,
-				'timestamp'   => time(),
-			)
-		);
-	}
-
-	/**
-	 * Make a request to the API
-	 *
-	 * @param string $endpoint API endpoint.
-	 * @param array  $data     Request data.
-	 * @return array
-	 */
-	private function make_request( string $endpoint, array $data ): array {
-		$response = wp_remote_post(
-			$endpoint,
-			array(
-				'body'    => wp_json_encode( $data ),
-				'headers' => array(
-					'Content-Type'  => 'application/json',
-					'X-Terminal-ID' => $this->terminal_id,
-					'X-Test-Mode'   => $this->test_mode,
-				),
-				'timeout' => 30,
-			)
-		);
-
-		return $this->handle_response( $response );
-	}
-
-	/**
-	 * Send payment request
-	 *
-	 * @param array $payment_data Payment data.
-	 * @return array
-	 */
-	public function send_payment_request( array $payment_data ): array {
-		return $this->send_payment_init( $payment_data );
+	private function redact_sensitive_data( array $data ): array {
+		$sensitive_fields = array( 'password', 'terminal_password', 'secret_key' );
+		foreach ( $sensitive_fields as $field ) {
+			if ( isset( $data[ $field ] ) ) {
+				$data[ $field ] = '***REDACTED***';
+			}
+		}
+		return $data;
 	}
 }

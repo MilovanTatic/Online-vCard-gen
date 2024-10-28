@@ -2,8 +2,8 @@
 /**
  * Logger Utility Class
  *
- * This class is responsible for managing all logging for the NovaBanka IPG plugin.
- * It uses WordPress's built-in WC_Logger to handle different levels of logging based on plugin settings.
+ * Handles logging operations for the NovaBanka IPG plugin using WooCommerce's logging system.
+ * Provides methods for different log levels and handles sensitive data redaction.
  *
  * @package NovaBankaIPG\Utils
  * @since 1.0.1
@@ -11,206 +11,240 @@
 
 namespace NovaBankaIPG\Utils;
 
-use NovaBankaIPG\Interfaces\LoggerInterface;
+use WC_Logger;
 
 /**
  * Logger Class
  *
  * Handles logging operations for the NovaBanka IPG plugin.
- * Implements LoggerInterface for standardized logging operations.
- *
- * @package NovaBankaIPG\Utils
- * @since 1.0.1
  */
-class Logger implements LoggerInterface {
+class Logger {
 	/**
-	 * Logger instance.
+	 * WooCommerce Logger instance.
 	 *
-	 * @var \WC_Logger|null
+	 * @var WC_Logger
 	 */
-	private $logger = null;
+	private $wc_logger;
 
 	/**
-	 * Source identifier for logs.
+	 * Source identifier for log entries.
 	 *
 	 * @var string
 	 */
-	private $source = 'novabankaipg';
+	private const LOG_SOURCE = 'novabanka-ipg';
 
 	/**
-	 * Constructor for the Logger utility class.
+	 * Keys that should be redacted in logs for security.
+	 *
+	 * @var array
+	 */
+	private const SENSITIVE_KEYS = array(
+		'password',
+		'terminal_password',
+		'secret_key',
+		'card_number',
+		'cvv',
+		'pan',
+		'token',
+		'auth_code',
+		'msgVerifier',
+	);
+
+	/**
+	 * Constructor.
 	 */
 	public function __construct() {
-		add_action( 'woocommerce_init', array( $this, 'init_logger' ) );
+		$this->wc_logger = wc_get_logger();
 	}
 
 	/**
-	 * Initialize WC_Logger instance.
-	 */
-	public function init_logger(): void {
-		if ( class_exists( 'WC_Logger' ) && is_null( $this->logger ) ) {
-			$this->logger = wc_get_logger();
-		}
-	}
-
-	/**
-	 * Get logger instance.
+	 * Log debug message.
 	 *
-	 * @return \WC_Logger|null
-	 */
-	private function get_logger() {
-		if ( is_null( $this->logger ) ) {
-			$this->init_logger();
-		}
-		return $this->logger;
-	}
-
-	/**
-	 * Log informational messages.
-	 *
-	 * @param string $message The message to log.
-	 * @param array  $context Additional context for the message.
-	 */
-	public function info( string $message, array $context = array() ): void {
-		if ( Config::is_debug_mode() && $this->get_logger() ) {
-			$this->log( 'info', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
-		}
-	}
-
-	/**
-	 * Log warning messages.
-	 *
-	 * @param string $message The message to log.
-	 * @param array  $context Additional context for the message.
-	 */
-	public function warning( string $message, array $context = array() ): void {
-		if ( $this->get_logger() ) {
-			$this->log( 'warning', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
-		}
-	}
-
-	/**
-	 * Log error messages.
-	 *
-	 * @param string $message The message to log.
-	 * @param array  $context Additional context for the message.
-	 */
-	public function error( string $message, array $context = array() ): void {
-		if ( $this->get_logger() ) {
-			$this->log( 'error', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
-		}
-	}
-
-	/**
-	 * Log debug messages.
-	 *
-	 * @param string $message The message to log.
-	 * @param array  $context Additional context for the message.
+	 * @param string $message Message to log.
+	 * @param array  $context Additional context data.
 	 */
 	public function debug( string $message, array $context = array() ): void {
-		if ( Config::is_debug_mode() && $this->get_logger() ) {
-			$this->log( 'debug', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
-		}
-	}
-
-	/**
-	 * Log critical messages.
-	 *
-	 * @param string $message The message to log.
-	 * @param array  $context Additional context for the message.
-	 */
-	public function critical( string $message, array $context = array() ): void {
-		if ( $this->get_logger() ) {
-			$this->log( 'critical', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
-		}
-	}
-
-	/**
-	 * Log payment messages.
-	 *
-	 * @param string $status  The payment status.
-	 * @param string $message The message to log.
-	 * @param array  $context Additional context for the message.
-	 */
-	public function log_payment( string $status, string $message, array $context = array() ): void {
-		if ( $this->get_logger() ) {
-			$context['payment_status'] = $status;
-			$this->log( 'payment', $this->formatMessage( $message ), $this->sanitizeContext( $context ) );
-		}
-	}
-
-	/**
-	 * Generic log method for handling all log levels.
-	 *
-	 * @param string $level   The level of the log (info, warning, error, debug).
-	 * @param string $message The message to log.
-	 * @param array  $context Additional context for the message.
-	 */
-	private function log( string $level, string $message, array $context = array() ): void {
-		if ( ! $this->get_logger() ) {
+		if ( ! Config::is_debug_mode() ) {
 			return;
 		}
 
-		$log_entry = array(
-			'timestamp' => current_time( 'c' ),
-			'level'     => strtoupper( $level ),
-			'message'   => $message,
-			'context'   => $context,
-		);
+		/**
+		 * Filter debug message before logging.
+		 *
+		 * @since 1.0.1
+		 * @param string $message The message to log.
+		 * @param array  $context The context data.
+		 */
+		$message = apply_filters( 'novabankaipg_debug_message', $message, $context );
 
-		$this->get_logger()->log(
-			$level,
-			wp_json_encode( $log_entry, JSON_PRETTY_PRINT ),
-			array( 'source' => $this->source )
-		);
+		$this->log( 'debug', $message, $context );
 	}
 
 	/**
-	 * Format the log message with a timestamp.
+	 * Log info message.
 	 *
-	 * @param string $message The message to format.
-	 * @return string The formatted message with timestamp.
+	 * @param string $message Message to log.
+	 * @param array  $context Additional context data.
 	 */
-	private function formatMessage( string $message ): string {
-		return sprintf( '[%s] %s', current_time( 'c' ), $message );
+	public function info( string $message, array $context = array() ): void {
+		/**
+		 * Filter info message before logging.
+		 *
+		 * @since 1.0.1
+		 * @param string $message The message to log.
+		 * @param array  $context The context data.
+		 */
+		$message = apply_filters( 'novabankaipg_info_message', $message, $context );
+
+		$this->log( 'info', $message, $context );
 	}
 
 	/**
-	 * Sanitize the context array by redacting sensitive values.
+	 * Log error message.
 	 *
-	 * @param array $context The context array to sanitize.
-	 * @return array The sanitized context array.
+	 * @param string $message Message to log.
+	 * @param array  $context Additional context data.
 	 */
-	private function sanitizeContext( array $context ): array {
-		$sanitized = array();
-		foreach ( $context as $key => $value ) {
-			if ( $this->shouldRedactKey( $key ) ) {
-				$sanitized[ $key ] = '[REDACTED]';
-			} else {
-				$sanitized[ $key ] = $value;
-			}
+	public function error( string $message, array $context = array() ): void {
+		/**
+		 * Filter error message before logging.
+		 *
+		 * @since 1.0.1
+		 * @param string $message The message to log.
+		 * @param array  $context The context data.
+		 */
+		$message = apply_filters( 'novabankaipg_error_message', $message, $context );
+
+		$this->log( 'error', $message, $context );
+
+		/**
+		 * Action after logging an error.
+		 *
+		 * @since 1.0.1
+		 * @param string $message The logged message.
+		 * @param array  $context The context data.
+		 */
+		do_action( 'novabankaipg_after_error_log', $message, $context );
+	}
+
+	/**
+	 * Log warning message.
+	 *
+	 * @param string $message Message to log.
+	 * @param array  $context Additional context data.
+	 */
+	public function warning( string $message, array $context = array() ): void {
+		/**
+		 * Filter warning message before logging.
+		 *
+		 * @since 1.0.1
+		 * @param string $message The message to log.
+		 * @param array  $context The context data.
+		 */
+		$message = apply_filters( 'novabankaipg_warning_message', $message, $context );
+
+		$this->log( 'warning', $message, $context );
+	}
+
+	/**
+	 * Internal logging method.
+	 *
+	 * @param string $level   Log level.
+	 * @param string $message Message to log.
+	 * @param array  $context Additional context data.
+	 */
+	private function log( string $level, string $message, array $context = array() ): void {
+		if ( ! $this->wc_logger ) {
+			return;
 		}
-		return $sanitized;
+
+		// Sanitize and validate data.
+		$message = sanitize_text_field( $message );
+		$context = $this->sanitize_context( $context );
+
+		// Format the log entry.
+		$log_entry = $this->format_message( $message, $context );
+
+		/**
+		 * Filter log entry before writing.
+		 *
+		 * @since 1.0.1
+		 * @param string $log_entry The formatted log entry.
+		 * @param string $level     The log level.
+		 * @param string $message   The original message.
+		 * @param array  $context   The context data.
+		 */
+		$log_entry = apply_filters( 'novabankaipg_log_entry', $log_entry, $level, $message, $context );
+
+		// Write to log.
+		$this->wc_logger->{$level}(
+			$log_entry,
+			array(
+				'source' => self::LOG_SOURCE,
+			)
+		);
+
+		/**
+		 * Action after writing to log.
+		 *
+		 * @since 1.0.1
+		 * @param string $level     The log level.
+		 * @param string $message   The original message.
+		 * @param array  $context   The context data.
+		 * @param string $log_entry The formatted log entry.
+		 */
+		do_action( 'novabankaipg_after_log', $level, $message, $context, $log_entry );
 	}
 
 	/**
-	 * Check if a key should be redacted from logs.
+	 * Format log message with context.
 	 *
-	 * @param string $key The key to check.
-	 * @return bool True if the key should be redacted, false otherwise.
+	 * @param string $message Message to format.
+	 * @param array  $context Context data.
+	 * @return string Formatted message.
 	 */
-	private function shouldRedactKey( string $key ): bool {
-		$sensitive_keys = array(
-			'password',
-			'secret',
-			'key',
-			'token',
-			'auth',
-			'credential',
+	private function format_message( string $message, array $context ): string {
+		$context_string = empty( $context ) ? '' : ' | Context: ' . wp_json_encode( $context );
+
+		return sprintf(
+			'[%s] %s%s',
+			wp_date( 'Y-m-d H:i:s' ),
+			$message,
+			$context_string
+		);
+	}
+
+	/**
+	 * Sanitize context data by redacting sensitive information.
+	 *
+	 * @param array $context Context data to sanitize.
+	 * @return array Sanitized context data.
+	 */
+	private function sanitize_context( array $context ): array {
+		array_walk_recursive(
+			$context,
+			function ( &$value, $key ) {
+				if ( $this->should_redact_key( $key ) ) {
+					$value = str_repeat( '*', 8 );
+				} elseif ( is_string( $value ) ) {
+					$value = sanitize_text_field( $value );
+				}
+			}
 		);
 
-		foreach ( $sensitive_keys as $sensitive ) {
-			if ( stripos( $key, $sensitive ) !== false ) {
+		return $context;
+	}
+
+	/**
+	 * Check if a key should be redacted.
+	 *
+	 * @param string $key Key to check.
+	 * @return bool True if key should be redacted.
+	 */
+	private function should_redact_key( string $key ): bool {
+		$key = strtolower( $key );
+		foreach ( self::SENSITIVE_KEYS as $sensitive_key ) {
+			if ( false !== strpos( $key, $sensitive_key ) ) {
 				return true;
 			}
 		}

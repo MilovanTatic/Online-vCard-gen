@@ -1,32 +1,24 @@
 <?php
 /**
- * Message Handler Implementation
+ * Message Handler Class
  *
  * Handles message construction, verification, and processing for IPG integration.
  *
- * @package     NovaBankaIPG\Utils
- * @since       1.0.0
+ * @package NovaBankaIPG\Utils
+ * @since 1.0.1
  */
 
 namespace NovaBankaIPG\Utils;
 
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
-use NovaBankaIPG\Utils\SharedUtilities;
-use NovaBankaIPG\Interfaces\MessageHandlerInterface;
-use NovaBankaIPG\Interfaces\DataHandlerInterface;
-use NovaBankaIPG\Interfaces\LoggerInterface;
-
-defined( 'ABSPATH' ) || exit;
+use Exception;
 
 /**
- * Class MessageHandler.
+ * Class MessageHandler
  *
  * Handles message construction, verification, and processing for IPG integration.
- *
- * @package     NovaBankaIPG\Utils
- * @since       1.0.0
  */
-class MessageHandler implements MessageHandlerInterface {
+class MessageHandler {
 	/**
 	 * Secret key for message verification.
 	 *
@@ -37,14 +29,14 @@ class MessageHandler implements MessageHandlerInterface {
 	/**
 	 * Data handler instance.
 	 *
-	 * @var DataHandlerInterface
+	 * @var DataHandler
 	 */
 	private $data_handler;
 
 	/**
 	 * Logger instance.
 	 *
-	 * @var LoggerInterface
+	 * @var Logger
 	 */
 	private $logger;
 
@@ -63,20 +55,20 @@ class MessageHandler implements MessageHandlerInterface {
 	private $terminal_password;
 
 	/**
-	 * Constructor
+	 * Constructor.
 	 *
-	 * @param string               $terminal_id       Terminal ID.
-	 * @param string               $terminal_password Terminal password.
-	 * @param string               $secret_key        Secret key for message verification.
-	 * @param DataHandlerInterface $data_handler      Data handler instance.
-	 * @param LoggerInterface      $logger            Logger instance.
+	 * @param string      $terminal_id       Terminal ID.
+	 * @param string      $terminal_password Terminal password.
+	 * @param string      $secret_key        Secret key for message verification.
+	 * @param DataHandler $data_handler      Data handler instance.
+	 * @param Logger      $logger            Logger instance.
 	 */
 	public function __construct(
 		string $terminal_id,
 		string $terminal_password,
 		string $secret_key,
-		DataHandlerInterface $data_handler,
-		LoggerInterface $logger
+		DataHandler $data_handler,
+		Logger $logger
 	) {
 		$this->terminal_id       = $terminal_id;
 		$this->terminal_password = $terminal_password;
@@ -89,44 +81,53 @@ class MessageHandler implements MessageHandlerInterface {
 	 * Generate PaymentInit request message.
 	 *
 	 * @param array $data Payment data.
-	 * @return array
-	 * @throws NovaBankaIPGException When required fields are missing or invalid.
+	 * @return array Prepared request message.
+	 * @throws NovaBankaIPGException When message generation fails.
 	 */
 	public function generate_payment_init_request( array $data ): array {
 		try {
+			// Allow plugins to modify request data.
+			$data = apply_filters( 'novabankaipg_payment_init_data', $data );
+
 			// Validate required fields.
-			SharedUtilities::validate_required_fields(
-				$data,
-				array(
-					'id',
-					'password',
-					'amount',
-					'currency',
-					'trackid',
-					'responseURL',
-					'errorURL',
-					'langid',
-				)
+			$required_fields = array(
+				'id',
+				'password',
+				'amount',
+				'currency',
+				'trackid',
+				'responseURL',
+				'errorURL',
+				'langid',
 			);
+
+			foreach ( $required_fields as $field ) {
+				if ( empty( $data[ $field ] ) ) {
+					throw new NovaBankaIPGException(
+						sprintf(
+							/* translators: %s: field name */
+							esc_html__( 'Required field missing: %s', 'novabanka-ipg-gateway' ),
+							$field
+						)
+					);
+				}
+			}
 
 			$request = $this->prepare_payment_init_request( $data );
 
 			$this->logger->debug( 'Generated PaymentInit request.', array( 'request' => $request ) );
 
 			return $request;
-		} catch ( \Exception $e ) {
+
+		} catch ( Exception $e ) {
 			$this->logger->error(
 				'Failed to generate PaymentInit request.',
 				array(
 					'error' => esc_html( $e->getMessage() ),
-					'data'  => esc_html( wp_json_encode( $data ) ),
+					'data'  => wp_json_encode( $data ),
 				)
 			);
-			throw new NovaBankaIPGException(
-				esc_html( $e->getMessage() ),
-				'REQUEST_GENERATION_ERROR',
-				esc_html( wp_json_encode( $data ) )
-			);
+			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
 		}
 	}
 
@@ -135,12 +136,14 @@ class MessageHandler implements MessageHandlerInterface {
 	 *
 	 * @param array  $notification Notification data from IPG.
 	 * @param string $redirect_url URL for browser redirection.
-	 * @return array
-	 * @throws NovaBankaIPGException When notification response generation fails.
+	 * @return array Response data.
+	 * @throws NovaBankaIPGException When response generation fails.
 	 */
 	public function generate_notification_response( array $notification, string $redirect_url ): array {
 		try {
-			SharedUtilities::validate_required_fields( $notification, array( 'paymentid' ) );
+			if ( empty( $notification['paymentid'] ) ) {
+				throw new NovaBankaIPGException( esc_html__( 'Payment ID missing in notification.', 'novabanka-ipg-gateway' ) );
+			}
 
 			$response = array(
 				'msgName'               => 'PaymentNotificationResponse',
@@ -150,24 +153,28 @@ class MessageHandler implements MessageHandlerInterface {
 			);
 
 			// Generate message verifier.
-			$response['msgVerifier'] = SharedUtilities::generate_message_verifier(
+			$verifier_fields = array(
 				$response['msgName'],
 				$response['version'],
 				$response['paymentID'],
 				$this->secret_key,
-				$response['browserRedirectionURL']
+				$response['browserRedirectionURL'],
 			);
 
-			return $response;
-		} catch ( \Exception $e ) {
+			$response['msgVerifier'] = SharedUtilities::generate_message_verifier( ...$verifier_fields );
+
+			// Allow plugins to modify response.
+			return apply_filters( 'novabankaipg_notification_response', $response, $notification );
+
+		} catch ( Exception $e ) {
 			$this->logger->error(
-				'Failed to generate notification response',
+				'Failed to generate notification response.',
 				array(
-					'error'        => $e->getMessage(),
-					'notification' => $notification,
+					'error'        => esc_html( $e->getMessage() ),
+					'notification' => wp_json_encode( $notification ),
 				)
 			);
-			throw new NovaBankaIPGException( esc_html( $e->getMessage() ), 'NOTIFICATION_RESPONSE_ERROR', esc_html( $notification ) );
+			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
 		}
 	}
 
@@ -176,42 +183,22 @@ class MessageHandler implements MessageHandlerInterface {
 	 *
 	 * @param array $data Payment initialization data.
 	 * @return array Prepared request data.
-	 * @throws NovaBankaIPGException When data validation fails.
+	 * @throws NovaBankaIPGException When data preparation fails.
 	 */
-	public function prepare_payment_init_request( array $data ): array {
+	private function prepare_payment_init_request( array $data ): array {
 		try {
-			$this->logger->debug(
-				'Starting payment init request preparation',
-				array( 'raw_input_data' => $data )
-			);
-
-			// Store raw values for message verification.
-			$raw_values = array(
-				'msgName'  => 'PaymentInitRequest',
-				'version'  => '1',
-				'id'       => $data['id'],
-				'password' => $data['password'],
-				'amt'      => $this->data_handler->format_amount( $data['amount'] ),
-				'trackid'  => (string) $data['trackid'],
-				'udf1'     => $data['udf1'] ?? '',
-				'udf5'     => $data['udf5'] ?? '',
-			);
-
-			$this->logger->debug(
-				'Raw values prepared for verification',
-				array( 'raw_values' => $raw_values )
-			);
+			$this->logger->debug( 'Preparing payment init request.', array( 'raw_data' => $data ) );
 
 			// Prepare base request.
 			$request = array(
-				'msgName'            => $raw_values['msgName'],
-				'version'            => $raw_values['version'],
-				'id'                 => $raw_values['id'],
-				'password'           => $raw_values['password'],
+				'msgName'            => 'PaymentInitRequest',
+				'version'            => '1',
+				'id'                 => $data['id'],
+				'password'           => $data['password'],
 				'action'             => '1',
 				'currencycode'       => $this->data_handler->get_currency_code( $data['currency'] ),
-				'amt'                => $raw_values['amt'],
-				'trackid'            => $raw_values['trackid'],
+				'amt'                => $this->data_handler->format_amount( $data['amount'] ),
+				'trackid'            => (string) $data['trackid'],
 				'responseURL'        => $data['responseURL'],
 				'errorURL'           => $data['errorURL'],
 				'langid'             => $data['langid'],
@@ -220,46 +207,39 @@ class MessageHandler implements MessageHandlerInterface {
 				'recurAction'        => '',
 			);
 
-			$this->logger->debug(
-				'Base request prepared',
-				array( 'request' => $request )
-			);
-
 			// Add optional fields.
-			if ( ! empty( $data['email'] ) ) {
-				$request['buyerEmailAddress'] = $data['email'];
-			}
-
-			// Add UDF fields.
-			foreach ( array( 'udf1', 'udf2', 'udf3' ) as $udf ) {
-				if ( ! empty( $data[ $udf ] ) ) {
-					$request[ $udf ] = $data[ $udf ];
+			$optional_fields = array( 'email', 'udf1', 'udf2', 'udf3' );
+			foreach ( $optional_fields as $field ) {
+				if ( ! empty( $data[ $field ] ) ) {
+					$request[ $field ] = $data[ $field ];
 				}
 			}
 
-			// Generate message verifier using raw values.
+			// Generate message verifier.
 			$verifier_fields = array(
-				$raw_values['msgName'],
-				$raw_values['version'],
-				$raw_values['id'],
-				$raw_values['password'],
-				$raw_values['amt'],
-				$raw_values['trackid'],
-				$raw_values['udf1'],
+				$request['msgName'],
+				$request['version'],
+				$request['id'],
+				$request['password'],
+				$request['amt'],
+				$request['trackid'],
+				$data['udf1'] ?? '',
 				$this->secret_key,
-				$raw_values['udf5'],
+				$data['udf5'] ?? '',
 			);
 
 			$request['msgVerifier'] = SharedUtilities::generate_message_verifier( ...$verifier_fields );
 
-			$this->logger->debug(
-				'Final request prepared',
-				array( 'final_request' => $request )
-			);
-
 			return $request;
+
 		} catch ( Exception $e ) {
-			throw new NovaBankaIPGException( 'Failed to prepare payment request: ' . esc_html( $e->getMessage() ) );
+			throw new NovaBankaIPGException(
+				sprintf(
+					/* translators: %s: error message */
+					esc_html__( 'Failed to prepare payment request: %s', 'novabanka-ipg-gateway' ),
+					$e->getMessage()
+				)
+			);
 		}
 	}
 }
