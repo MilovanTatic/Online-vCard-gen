@@ -48,7 +48,7 @@ Formats log messages
 Manages log levels
 Redacts sensitive data
 NO business logic .
-Services/class-paymentservicefactory.php
+Services/class-PaymentService.php
 ONLY creates PaymentService instances
 Manages dependency injection
 NO business logic
