@@ -28,7 +28,7 @@ class Config {
 	/**
 	 * Required gateway settings
 	 */
-	private const REQUIRED_SETTINGS = array(
+	public const REQUIRED_SETTINGS = array(
 		'terminal_id' => array(
 			'title'    => 'Terminal ID',
 			'type'     => 'text',
@@ -145,8 +145,15 @@ class Config {
 	 *
 	 * @param array $settings Plugin settings.
 	 */
-	public function __construct( array $settings ) {
-		$this->settings = $settings;
+	public function __construct( array $settings = array() ) {
+		$this->settings = array_merge(
+			array_map(
+				function ( $setting ) {
+					return $setting['default']; },
+				self::REQUIRED_SETTINGS
+			),
+			$settings
+		);
 	}
 
 	/**

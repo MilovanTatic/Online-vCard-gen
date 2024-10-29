@@ -1,74 +1,20 @@
-Here's a strict breakdown of each file's responsibilities according to our Project Priorities:
-1. class-novabankaipg.php (Main Plugin File)
-Acts as the plugin bootstrap
-Defines plugin constants
-Handles autoloading
-Initializes the dependency container
-NO business logic, only initialization .
-Core/class-novabankaipggateway.php
-Extends WC_Payment_Gateway
-Handles WooCommerce integration points
-Manages gateway settings
-Delegates all complex operations to services
-NO direct API calls or data processing .
-Services/class-paymentservice.php
-Handles ALL payment-related business logic
-Manages payment flow and states
-Formats payment data
-Uses APIHandler for communication
-Provides hooks for customization
-NO direct HTTP calls .
-Services/class-notificationservice.php
-Handles ALL notification processing
-Validates notification data
-Updates order statuses
-Manages notification responses
-NO direct API calls .
-Utils/class-apihandler.php
-ONLY handles raw HTTP communication
-Makes API requests
-Handles basic response validation
-NO business logic
-NO payment processing .
-Utils/class-messagehandler.php
-ONLY handles message construction
-Generates message verifiers
-Validates message signatures
-NO HTTP calls
-NO business logic .
-Utils/class-datahandler.php
-ONLY handles data formatting
-Sanitizes input/output
-Validates data structures
-NO business logic
-NO API calls .
-Utils/class-logger.php
-ONLY handles logging operations
-Formats log messages
-Manages log levels
-Redacts sensitive data
-NO business logic .
-Services/class-PaymentService.php
-ONLY creates PaymentService instances
-Manages dependency injection
-NO business logic
-NO direct service calls .
-Key Principles:
-1. Each class has ONE primary responsibility
-Services handle business logic
-Utils handle technical operations
-Core handles WooCommerce integration
-NO circular dependencies
-ALL public methods are documented
-ALL sensitive data is redacted in logs
-ALL user input is sanitized
-ALL output is escaped
-ALL errors are logged .
+## Key Principles:
+1. Each class has ONE primary responsibility.
+2. Services handle business logic.
+3. Utils handle technical operations.
+4. Core handles WooCommerce integration.
+5. NO circular dependencies.
+6. ALL public methods are documented
+7. ALL sensitive data is redacted in logs.
+8. ALL user input is sanitized.
+9. ALL output is escaped.
+10. ALL errors are logged.
+
 This structure ensures:
-Clear separation of concerns
-Easy testing
-Simple maintenance
-Secure operations
-WordPress/WooCommerce compliance .
+1. Clear separation of concerns
+2. Easy testing.
+3. Simple maintenance.
+4. Secure operations.
+5. WordPress/WooCommerce compliance.
 
 ALWAYS use latest WordPress/WooCommerce coding standards. Always use latest PHP coding standards. Always use . in inline comments. Alyways have SoC in mind. Always have simple and clean code. Always use the existing code as an example. Always try to keep the code DRY. Always have the user in mind. Always try to make the code more readable. Always have the user in mind. Always try to handle errors and exceptions gracefully.
