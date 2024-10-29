@@ -12,6 +12,7 @@
 namespace NovaBankaIPG\Exceptions;
 
 use Exception;
+use NovaBankaIPG\Utils\Logger;
 
 /**
  * NovaBankaIPGException Class
@@ -235,5 +236,37 @@ class NovaBankaIPGException extends Exception {
 			$this->getCode(),
 			$this->getMessage()
 		);
+	}
+
+	/**
+	 * Handle and log an exception, optionally re-throwing it.
+	 *
+	 * @param Exception $e          The exception to handle.
+	 * @param Logger    $logger     Logger instance to use.
+	 * @param string    $context    Context description for the error.
+	 * @param array     $extra_data Optional additional data to log.
+	 */
+	public static function handle_error(
+		Exception $e,
+		Logger $logger,
+		string $context,
+		array $extra_data = array()
+	): void {
+		$log_data = array(
+			'error' => $e->getMessage(),
+			'trace' => $e->getTraceAsString(),
+		);
+
+		if ( ! empty( $extra_data ) ) {
+			$log_data = array_merge( $log_data, $extra_data );
+		}
+
+		$logger->error( "{$context} failed", $log_data );
+
+		if ( $e instanceof self ) {
+			throw $e;
+		}
+
+		throw new self( esc_html( $e->getMessage() ), absint( $e->getCode() ), $e );
 	}
 }

@@ -12,6 +12,7 @@
 namespace NovaBankaIPG\Utils;
 
 use WC_Logger;
+use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 
 /**
  * Logger Class
@@ -27,6 +28,13 @@ class Logger {
 	private $wc_logger;
 
 	/**
+	 * Config instance.
+	 *
+	 * @var Config
+	 */
+	private $config;
+
+	/**
 	 * Source identifier for log entries.
 	 *
 	 * @var string
@@ -35,9 +43,12 @@ class Logger {
 
 	/**
 	 * Constructor.
+	 *
+	 * @param Config $config Configuration instance.
 	 */
-	public function __construct() {
+	public function __construct( Config $config ) {
 		$this->wc_logger = wc_get_logger();
+		$this->config    = $config;
 	}
 
 	/**
@@ -47,7 +58,7 @@ class Logger {
 	 * @param array  $context Additional context data.
 	 */
 	public function debug( string $message, array $context = array() ): void {
-		if ( ! Config::is_debug_mode() ) {
+		if ( ! $this->config->is_debug_mode() ) {
 			return;
 		}
 
@@ -182,14 +193,14 @@ class Logger {
 	 * @param string $message    Error message.
 	 * @param array  $context    Error context.
 	 * @param string $error_type Error type for exception.
-	 * @throws NovaBankaIPGException
+	 * @throws NovaBankaIPGException When an error occurs that needs to be logged and thrown.
 	 */
 	public function log_error_and_throw(
 		string $message,
 		array $context = array(),
 		string $error_type = 'API_ERROR'
 	): void {
-		$this->error( $message, $context );
-		throw new NovaBankaIPGException( $message, $error_type );
+		$this->error( esc_html( $message ), $context );
+		throw new NovaBankaIPGException( esc_html( $message ), esc_html( $error_type ) );
 	}
 }

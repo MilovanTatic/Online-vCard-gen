@@ -10,7 +10,7 @@
  * @wordpress-plugin
  * Plugin Name: NovaBanka IPG33 Payment Gateway
  * Description: 3D Secure payment gateway integration for WooCommerce
- * Version:     1.0.1
+ * Version:     1.0.2
  * Author:      Milovan Tatić
  * Text Domain: novabankaipg
  * Domain Path: /languages
@@ -30,17 +30,12 @@ use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Config;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\MessageHandler;
-use NovaBankaIPG\Utils\SharedUtilities;
 use NovaBankaIPG\Utils\ThreeDSHandler;
 use NovaBankaIPG\Services\NotificationService;
 use NovaBankaIPG\Services\PaymentService;
 
 /**
  * Main plugin class for NovaBanka IPG33 Payment Gateway.
- *
- * Handles plugin initialization, component loading, and WooCommerce integration.
- *
- * @since 1.0.0
  */
 class NovaBankaIPG {
 	/**
@@ -48,21 +43,21 @@ class NovaBankaIPG {
 	 *
 	 * @var self|null
 	 */
-	private static $instance = null;
+	private static ?self $instance = null;
 
 	/**
-	 * Container for services.
+	 * Container for dependency injection.
 	 *
 	 * @var array
 	 */
-	private $container = array();
+	private array $container = array();
 
 	/**
-	 * Plugin version.
+	 * Plugin version number for tracking releases.
 	 *
 	 * @var string
 	 */
-	private const VERSION = '1.0.0';
+	private const VERSION = '1.0.2';
 
 	/**
 	 * Plugin directory path.
@@ -76,7 +71,7 @@ class NovaBankaIPG {
 	 *
 	 * @var string
 	 */
-	private const PLUGIN_URL = WP_PLUGIN_URL . '/novabanka-ipg';
+	private const PLUGIN_URL = WP_PLUGIN_URL . '/gateway-33';
 
 	/**
 	 * Get the singleton instance of the plugin.
@@ -91,7 +86,7 @@ class NovaBankaIPG {
 	}
 
 	/**
-	 * Constructor.
+	 * Plugin constructor.
 	 */
 	private function __construct() {
 		$this->define_constants();
@@ -104,169 +99,99 @@ class NovaBankaIPG {
 	 * Define plugin constants.
 	 */
 	private function define_constants(): void {
-		if ( ! defined( 'NOVABANKAIPG_VERSION' ) ) {
-			define( 'NOVABANKAIPG_VERSION', self::VERSION );
-		}
-		if ( ! defined( 'NOVABANKAIPG_PLUGIN_DIR' ) ) {
-			define( 'NOVABANKAIPG_PLUGIN_DIR', self::PLUGIN_DIR );
-		}
-		if ( ! defined( 'NOVABANKAIPG_PLUGIN_URL' ) ) {
-			define( 'NOVABANKAIPG_PLUGIN_URL', self::PLUGIN_URL );
-		}
+		define( 'NOVABANKAIPG_VERSION', self::VERSION );
+		define( 'NOVABANKAIPG_PLUGIN_DIR', self::PLUGIN_DIR );
+		define( 'NOVABANKAIPG_PLUGIN_URL', self::PLUGIN_URL );
 	}
 
 	/**
-	 * Initialize autoloader.
+	 * Initialize the autoloader.
 	 */
 	private function init_autoloader(): void {
 		spl_autoload_register( array( $this, 'autoload' ) );
 	}
 
 	/**
-	 * Initialize container with all dependencies.
+	 * Initialize the dependency container.
 	 */
 	private function init_container(): void {
-		// Initialize basic utilities first.
-		$this->container['logger']       = new Logger();
-
-		// Get settings.
-		$settings = Config::get_all_settings();
-
-		// Initialize message handler.
-		$this->container['message_handler'] = new MessageHandler(
-			$settings['terminal_id'],
-			$settings['terminal_password'],
-			$settings['secret_key'],
-			$this->container['logger']
+		// Initialize Config.
+		$this->container['config'] = new Config(
+			array(
+				'plugin_version' => self::VERSION,
+				'plugin_dir'     => self::PLUGIN_DIR,
+				'plugin_url'     => self::PLUGIN_URL,
+				'terminal_id'    => get_option( 'woocommerce_novabankaipg_terminal_id', '' ),
+				'password'       => get_option( 'woocommerce_novabankaipg_password', '' ),
+				'secret_key'     => get_option( 'woocommerce_novabankaipg_secret_key', '' ),
+				'ipg_url'        => get_option( 'woocommerce_novabankaipg_ipg_url', '' ),
+				'test_mode'      => get_option( 'woocommerce_novabankaipg_test_mode', 'yes' ),
+			)
 		);
 
-		// Initialize API handler with dependencies.
+		// Initialize Logger.
+		$this->container['logger'] = new Logger( $this->container['config'] );
+
+		// Initialize API Handler.
 		$this->container['api_handler'] = new APIHandler(
-			$settings['api_endpoint'] ?? '',
-			$settings['terminal_id'] ?? '',
-			$settings['terminal_password'] ?? '',
-			$settings['secret_key'] ?? '',
-			$this->container['logger'],
-			$settings['test_mode'] ?? 'yes'
-		);
-
-		// Initialize services.
-		$this->init_services();
-	}
-
-	/**
-	 * Initialize services.
-	 */
-	private function init_services(): void {
-		$this->container['payment_service'] = new PaymentService(
-			$this->container['api_handler'],
-			$this->container['message_handler'],
+			$this->container['config']->get( 'ipg_url' ),
 			$this->container['logger']
 		);
 
-		$this->container['notification_service'] = new NotificationService(
-			$this->container['logger'],
-			$this->container['message_handler']
+		// Initialize Message Handler.
+		$this->container['message_handler'] = new MessageHandler(
+			$this->container['config']->get( 'terminal_id' ),
+			$this->container['config']->get( 'password' ),
+			$this->container['config']->get( 'secret_key' ),
+			$this->container['logger']
+		);
+
+		// Initialize Services.
+		$this->init_services();
+
+		// Initialize Gateway.
+		add_filter(
+			'woocommerce_payment_gateways',
+			function ( $gateways ) {
+				$gateways[] = new NovaBankaIPGGateway(
+					$this->container['payment_service'],
+					$this->container['notification_service']
+				);
+				return $gateways;
+			}
 		);
 	}
 
 	/**
-	 * Initialize hooks.
+	 * Initialize plugin hooks.
 	 */
 	private function init_hooks(): void {
-		// Check WooCommerce dependency.
-		add_action( 'plugins_loaded', array( $this, 'check_dependencies' ) );
+		add_action( 'admin_notices', array( $this, 'check_dependencies' ) );
+		add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'add_settings_link' ) );
 
-		// Initialize plugin after WooCommerce loads.
-		add_action( 'woocommerce_init', array( $this, 'init_plugin' ) );
+		// Register admin assets.
+		if ( is_admin() ) {
+			add_action( 'admin_enqueue_scripts', array( $this, 'register_admin_scripts' ) );
+		}
 
-		// Register payment gateway.
-		add_filter( 'woocommerce_payment_gateways', array( $this, 'add_gateway' ) );
-
-		// Register scripts and styles.
-		add_action( 'wp_enqueue_scripts', array( $this, 'register_scripts' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'register_admin_scripts' ) );
-
-		// Handle API endpoints.
-		add_action( 'woocommerce_api_novabankaipg', array( $this, 'handle_api_request' ) );
-
-		// Add settings link to plugins page.
-		add_filter(
-			'plugin_action_links_' . plugin_basename( __FILE__ ),
-			array( $this, 'add_settings_link' )
-		);
+		// Register API endpoints.
+		add_action( 'wp_ajax_novabankaipg_handle_notification', array( $this, 'handle_api_request' ) );
+		add_action( 'wp_ajax_noexec_novabankaipg_handle_notification', array( $this, 'handle_api_request' ) );
 	}
 
 	/**
-	 * Check plugin dependencies.
+	 * Check WooCommerce dependency.
 	 */
 	public function check_dependencies(): void {
 		if ( ! class_exists( 'WooCommerce' ) ) {
 			add_action( 'admin_notices', array( $this, 'woocommerce_missing_notice' ) );
-			return;
 		}
 	}
 
 	/**
-	 * Initialize the plugin.
-	 */
-	public function init_plugin(): void {
-		load_plugin_textdomain(
-			'novabanka-ipg-gateway',
-			false,
-			dirname( plugin_basename( __FILE__ ) ) . '/languages/'
-		);
-	}
-
-	/**
-	 * Add the gateway to WooCommerce.
+	 * Register admin scripts.
 	 *
-	 * @param array $methods Existing payment methods.
-	 * @return array Modified payment methods.
-	 */
-	public function add_gateway( array $methods ): array {
-		$methods[] = NovaBankaIPGGateway::class;
-		return $methods;
-	}
-
-	/**
-	 * Register frontend scripts and styles.
-	 */
-	public function register_scripts(): void {
-		if ( ! is_checkout() ) {
-			return;
-		}
-
-		wp_enqueue_style(
-			'novabankaipg-styles',
-			NOVABANKAIPG_PLUGIN_URL . '/assets/css/ipg-styles.css',
-			array(),
-			NOVABANKAIPG_VERSION
-		);
-
-		wp_enqueue_script(
-			'novabankaipg-scripts',
-			NOVABANKAIPG_PLUGIN_URL . '/assets/js/ipg-scripts.js',
-			array( 'jquery' ),
-			NOVABANKAIPG_VERSION,
-			true
-		);
-
-		// Add nonce for AJAX requests.
-		wp_localize_script(
-			'novabankaipg-scripts',
-			'novabankaipg_params',
-			array(
-				'ajax_url' => admin_url( 'admin-ajax.php' ),
-				'nonce'    => wp_create_nonce( 'novabankaipg-nonce' ),
-			)
-		);
-	}
-
-	/**
-	 * Register admin scripts and styles.
-	 *
-	 * @param string $hook Current admin page hook.
+	 * @param string $hook The current admin page hook.
 	 */
 	public function register_admin_scripts( string $hook ): void {
 		if ( 'woocommerce_page_wc-settings' !== $hook ) {
@@ -288,101 +213,120 @@ class NovaBankaIPG {
 			true
 		);
 
-		// Add nonce for admin AJAX requests.
 		wp_localize_script(
 			'novabankaipg-admin',
-			'novabankaipg_admin_params',
+			'novaBankaIPG',
 			array(
-				'ajax_url' => admin_url( 'admin-ajax.php' ),
-				'nonce'    => wp_create_nonce( 'novabankaipg-admin-nonce' ),
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'novabankaipg-admin-nonce' ),
 			)
 		);
 	}
 
 	/**
-	 * Handle API requests.
+	 * Handle API request.
 	 */
 	public function handle_api_request(): void {
-		// Verify nonce for API requests.
-		if ( ! check_ajax_referer( 'novabankaipg-nonce', 'nonce', false ) ) {
-			wp_send_json_error( 'Invalid nonce.' );
-			return;
-		}
-
-		// Sanitize and validate POST data.
-		$post_data = array_map( 'sanitize_text_field', wp_unslash( $_POST ) );
+		check_ajax_referer( 'novabankaipg-nonce', 'nonce' );
 
 		try {
+			$post_data = $this->validate_request( $_POST );
 			$this->container['notification_service']->handle_notification( $post_data );
 			wp_send_json_success();
 		} catch ( \Exception $e ) {
-			$this->container['logger']->error( 'API request failed: ' . esc_html( $e->getMessage() ) );
-			wp_send_json_error( esc_html( $e->getMessage() ) );
+			$this->container['logger']->error(
+				'API request failed: ' . $e->getMessage(),
+				array( 'exception' => $e )
+			);
+			wp_send_json_error( $e->getMessage() );
 		}
 	}
 
 	/**
-	 * Add settings link to plugin list.
+	 * Validate the request data.
 	 *
-	 * @param array $links Existing plugin links.
-	 * @return array Modified plugin links.
+	 * @param array $data The request data.
+	 * @return array The sanitized request data.
+	 */
+	private function validate_request( array $data ): array {
+		return array_map( 'sanitize_text_field', wp_unslash( $data ) );
+	}
+
+	/**
+	 * Add a settings link to the plugin in the WordPress admin.
+	 *
+	 * @param array $links Array of existing links.
+	 * @return array Modified array of links.
 	 */
 	public function add_settings_link( array $links ): array {
-		$settings_url  = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=novabankaipg' );
-		$settings_link = sprintf(
-			'<a href="%s">%s</a>',
-			esc_url( $settings_url ),
-			esc_html__( 'Settings', 'novabanka-ipg-gateway' )
+		$settings_url = admin_url( 'admin.php?page=wc-settings&tab=checkout&section=novabankaipg' );
+		array_unshift(
+			$links,
+			sprintf(
+				'<a href="%s">%s</a>',
+				esc_url( $settings_url ),
+				esc_html__( 'Settings', 'novabanka-ipg-gateway' )
+			)
 		);
-		array_unshift( $links, $settings_link );
 		return $links;
 	}
 
 	/**
-	 * Display WooCommerce missing notice.
+	 * Display a notice if WooCommerce is missing.
 	 */
 	public function woocommerce_missing_notice(): void {
-		?>
-		<div class="error">
-			<p>
-				<?php
-				esc_html_e(
-					'NovaBanka IPG requires WooCommerce to be installed and active.',
-					'novabanka-ipg-gateway'
-				);
-				?>
-			</p>
-		</div>
-		<?php
+		printf(
+			'<div class="error"><p>%s</p></div>',
+			esc_html__( 'NovaBanka IPG requires WooCommerce to be installed and active.', 'novabanka-ipg-gateway' )
+		);
 	}
 
 	/**
-	 * Autoloader for plugin classes.
+	 * Autoload classes.
 	 *
-	 * @param string $class_name Full class name.
+	 * @param string $class_name The class name to autoload.
 	 */
 	private function autoload( string $class_name ): void {
-		// Only handle classes in our namespace.
 		if ( 0 !== strpos( $class_name, 'NovaBankaIPG\\' ) ) {
 			return;
 		}
 
-		// Convert class name to file path.
 		$file_path = str_replace(
 			array( 'NovaBankaIPG\\', '\\' ),
 			array( '', DIRECTORY_SEPARATOR ),
 			$class_name
 		);
 
-		// Convert to lowercase.
-		$file_name = 'class-' . strtolower( basename( $file_path ) ) . '.php';
-		$file_path = dirname( $file_path ) . DIRECTORY_SEPARATOR . $file_name;
-
-		$file = NOVABANKAIPG_PLUGIN_DIR . '/includes/' . $file_path;
+		$file = NOVABANKAIPG_PLUGIN_DIR . '/includes/' . dirname( $file_path )
+			. DIRECTORY_SEPARATOR . 'class-' . strtolower( basename( $file_path ) ) . '.php';
 
 		if ( file_exists( $file ) ) {
 			require_once $file;
 		}
+	}
+
+	/**
+	 * Initialize plugin services.
+	 */
+	private function init_services(): void {
+		// Initialize Payment Service.
+		$this->container['payment_service'] = new PaymentService(
+			$this->container['api_handler'],
+			$this->container['message_handler'],
+			$this->container['logger']
+		);
+
+		// Initialize Notification Service.
+		$this->container['notification_service'] = new NotificationService(
+			$this->container['logger'],
+			$this->container['message_handler']
+		);
+
+		// Initialize 3DS Handler.
+		$this->container['threeds_handler'] = new ThreeDSHandler(
+			$this->container['api_handler'],
+			$this->container['logger']
+		);
 	}
 }
 

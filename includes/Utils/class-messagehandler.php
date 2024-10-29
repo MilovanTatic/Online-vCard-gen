@@ -39,13 +39,6 @@ class MessageHandler {
 	private $secret_key;
 
 	/**
-	 * Data Handler instance.
-	 *
-	 * @var DataHandler
-	 */
-	private $data_handler;
-
-	/**
 	 * Logger instance.
 	 *
 	 * @var Logger
@@ -55,67 +48,32 @@ class MessageHandler {
 	/**
 	 * Constructor.
 	 *
-	 * @param string      $terminal_id      Terminal ID.
-	 * @param string      $terminal_password Terminal password.
-	 * @param string      $secret_key       Secret key.
-	 * @param DataHandler $data_handler     Data Handler instance.
-	 * @param Logger      $logger           Logger instance.
+	 * @param string $terminal_id      Terminal ID.
+	 * @param string $terminal_password Terminal password.
+	 * @param string $secret_key       Secret key.
+	 * @param Logger $logger           Logger instance.
 	 */
 	public function __construct(
 		string $terminal_id,
 		string $terminal_password,
 		string $secret_key,
-		DataHandler $data_handler,
 		Logger $logger
 	) {
 		$this->terminal_id       = $terminal_id;
 		$this->terminal_password = $terminal_password;
 		$this->secret_key        = $secret_key;
-		$this->data_handler      = $data_handler;
 		$this->logger            = $logger;
 	}
 
 	/**
 	 * Generate message verifier for IPG requests.
 	 *
-	 * @param string $msg_name Message name.
-	 * @param string $version  Version.
-	 * @param string $id       Terminal ID.
-	 * @param string $password Terminal password.
-	 * @param string $amount   Transaction amount.
-	 * @param string $track_id Track ID.
+	 * @param array $data Data to generate verifier for.
 	 * @return string Generated message verifier.
 	 */
-	public function generate_message_verifier(
-		string $msg_name,
-		string $version,
-		string $id,
-		string $password,
-		string $amount,
-		string $track_id
-	): string {
-		// Build message verifier base string.
-		$verifier_base = $msg_name . $version . $id . $password . $amount . $track_id . '' . $this->secret_key . '';
-
-		// Generate SHA-256 hash.
-		$hash = hash( 'sha256', $verifier_base );
-
-		// Convert to binary.
-		$hash_bytes = hex2bin( $hash );
-
-		// Convert to base64.
-		$verifier = base64_encode( $hash_bytes );
-
-		$this->logger->debug(
-			'Generated message verifier.',
-			array(
-				'msg_name' => $msg_name,
-				'track_id' => $track_id,
-				'verifier' => $verifier,
-			)
-		);
-
-		return $verifier;
+	public function generate_verifier( array $data ): string {
+		$data = SharedUtilities::format_payment_data( $data );
+		return $this->create_hash( $data );
 	}
 
 	/**
@@ -156,5 +114,64 @@ class MessageHandler {
 		);
 
 		return $is_valid;
+	}
+
+	/**
+	 * Create hash for message verification.
+	 *
+	 * @param array $data Data to create hash from.
+	 * @return string Generated hash in base64 format.
+	 */
+	private function create_hash( array $data ): string {
+		// Implementation from dev-message_verifier_hash_example.md.
+		$verifier_base = implode(
+			'',
+			array(
+				$data['msgName'],
+				$data['version'],
+				$this->terminal_id,
+				$this->terminal_password,
+				$data['amt'] ?? '',
+				$data['trackId'] ?? '',
+				$this->secret_key,
+			)
+		);
+
+		return base64_encode( hex2bin( hash( 'sha256', $verifier_base ) ) );
+	}
+
+	/**
+	 * Validate and sanitize request data.
+	 *
+	 * @param array $data Request data to validate.
+	 * @return array Sanitized request data.
+	 */
+	public function validate_request( array $data ): array {
+		$sanitized_data = array_map( 'sanitize_text_field', wp_unslash( $data ) );
+
+		$this->logger->debug(
+			'Validated request data.',
+			array( 'data' => SharedUtilities::redact_sensitive_data( $sanitized_data ) )
+		);
+
+		return $sanitized_data;
+	}
+
+	/**
+	 * Get and validate JSON payload from request.
+	 *
+	 * @return array Validated JSON data.
+	 * @throws NovaBankaIPGException When JSON is invalid.
+	 */
+	public function get_json_payload(): array {
+		$raw_post = file_get_contents( 'php://input' );
+		$data     = json_decode( $raw_post, true );
+
+		if ( JSON_ERROR_NONE !== json_last_error() ) {
+			$this->logger->error( 'Invalid JSON payload received' );
+			throw NovaBankaIPGException::invalid_response( 'Invalid JSON payload' );
+		}
+
+		return $this->validate_request( $data );
 	}
 }

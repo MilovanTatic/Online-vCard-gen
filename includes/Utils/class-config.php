@@ -65,6 +65,13 @@ class Config {
 			'label'   => 'Enable NovaBanka IPG Payment',
 			'default' => 'no',
 		),
+		'debug_mode'          => array(
+			'title'       => 'Debug Mode',
+			'type'        => 'checkbox',
+			'label'       => 'Enable Debug Logging',
+			'description' => 'Log debug messages to WooCommerce logs',
+			'default'     => 'no',
+		),
 		'title'               => array(
 			'title'       => 'Title',
 			'type'        => 'text',
@@ -136,14 +143,14 @@ class Config {
 	/**
 	 * Constructor
 	 *
-	 * @param array $settings Plugin settings
+	 * @param array $settings Plugin settings.
 	 */
 	public function __construct( array $settings ) {
 		$this->settings = $settings;
 	}
 
 	/**
-	 * Get all settings
+	 * Get all settings.
 	 *
 	 * @return array
 	 */
@@ -154,8 +161,8 @@ class Config {
 	/**
 	 * Get setting value
 	 *
-	 * @param string $key Setting key
-	 * @param mixed  $default Default value
+	 * @param string $key Setting key.
+	 * @param mixed  $default Default value.
 	 * @return mixed
 	 */
 	public function get_setting( string $key, $default = null ) {
@@ -217,7 +224,7 @@ class Config {
 	}
 
 	/**
-	 * Get form fields for WooCommerce settings
+	 * Get form fields for WooCommerce settings.
 	 *
 	 * @return array
 	 */
@@ -226,11 +233,20 @@ class Config {
 	}
 
 	/**
-	 * Get sensitive fields that should be redacted in logs
+	 * Get sensitive fields that should be redacted in logs.
 	 *
 	 * @return array
 	 */
 	public static function get_sensitive_fields(): array {
 		return array( 'password', 'secret_key' );
+	}
+
+	/**
+	 * Check if debug mode is enabled.
+	 *
+	 * @return bool
+	 */
+	public function is_debug_mode(): bool {
+		return 'yes' === $this->get_setting( 'debug_mode', 'no' );
 	}
 }

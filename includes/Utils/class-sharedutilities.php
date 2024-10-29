@@ -276,4 +276,41 @@ class SharedUtilities {
 
 		return $data;
 	}
+
+	/**
+	 * Validates that the notification data contains all required fields.
+	 *
+	 * @param array $data The notification data to validate.
+	 * @return bool True if all required fields are present, false otherwise.
+	 */
+	public static function validate_notification_data( array $data ): bool {
+		$required_fields = array( 'msgName', 'version', 'paymentid', 'result' );
+		return empty( array_diff( $required_fields, array_keys( $data ) ) );
+	}
+
+	/**
+	 * Format payment data by sanitizing all text fields.
+	 *
+	 * @param array $data The payment data to format.
+	 * @return array The formatted payment data with sanitized values.
+	 */
+	public static function format_payment_data( array $data ): array {
+		return array_map( 'sanitize_text_field', $data );
+	}
+
+	/**
+	 * Get the WooCommerce payment status based on the payment result.
+	 *
+	 * @param string $result The payment result from the payment gateway.
+	 * @return string The corresponding WooCommerce payment status.
+	 */
+	public static function get_payment_status( string $result ): string {
+		$status_map = array(
+			'CAPTURED'   => 'completed',
+			'AUTHORIZED' => 'processing',
+			'FAILED'     => 'failed',
+			'DECLINED'   => 'failed',
+		);
+		return $status_map[ $result ] ?? 'pending';
+	}
 }

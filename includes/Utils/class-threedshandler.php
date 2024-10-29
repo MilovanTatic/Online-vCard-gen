@@ -63,23 +63,14 @@ class ThreeDSHandler {
 	 * @return array The response from the IPG.
 	 * @throws NovaBankaIPGException When the 3D Secure initiation fails.
 	 */
-	public function initiate_3ds( WC_Order $order, array $auth_data ): array {
+	public function initiate_authentication( WC_Order $order, array $auth_data ): array {
 		try {
-			// Prepare the 3DS request data.
-			$auth_data = $this->prepare_auth_data( $order, $auth_data );
+			$response = $this->api_handler->post( '/3ds/initiate', $auth_data );
 
-			// Log the initiation request if in debug mode.
-			if ( Config::get_setting( 'debug', false ) ) {
-				$this->logger->debug( 'Initiating 3D Secure authentication', array( 'auth_data' => $auth_data ) );
-			}
-
-			// Send the 3DS initiation request to the IPG.
-			$response = $this->api_handler->send_3ds_initiation( $auth_data );
-
-			// Handle the response from IPG.
 			if ( 'PENDING_AUTH' !== $response['status'] ) {
 				throw NovaBankaIPGException::threeDSInitiationFailed( '3D Secure initiation failed.', $response );
 			}
+
 			$this->logger->info(
 				'3D Secure initiation successful.',
 				array(
@@ -87,25 +78,17 @@ class ThreeDSHandler {
 					'response' => $response,
 				)
 			);
+
 			return $response;
-		} catch ( NovaBankaIPGException $e ) {
-			$this->logger->error(
-				'3D Secure initiation failed.',
-				array(
-					'order_id' => $order->get_id(),
-					'error'    => $e->getMessage(),
-				)
-			);
-			throw $e;
 		} catch ( Exception $e ) {
-			$this->logger->error(
-				'3D Secure initiation failed due to an unexpected error.',
+			NovaBankaIPGException::handle_error(
+				$e,
+				$this->logger,
+				'3D Secure initiation',
 				array(
 					'order_id' => $order->get_id(),
-					'error'    => $e->getMessage(),
 				)
 			);
-			throw new NovaBankaIPGException( '3D Secure initiation failed: ' . esc_html( $e->getMessage() ) );
 		}
 	}
 
@@ -117,50 +100,32 @@ class ThreeDSHandler {
 	 * @return array The response from the IPG.
 	 * @throws NovaBankaIPGException When the 3D Secure verification fails.
 	 */
-	public function verify_3ds( WC_Order $order, array $verification_data ): array {
+	public function verify_authentication( WC_Order $order, array $verification_data ): array {
 		try {
-			// Prepare verification data.
-			$verification_data = $this->prepare_verification_data( $order, $verification_data );
+			$response = $this->api_handler->post( '/3ds/verify', $verification_data );
 
-			// Log verification data if in debug mode.
-			if ( Config::get_setting( 'debug', false ) ) {
-				$this->logger->debug( 'Verifying 3D Secure authentication', array( 'verification_data' => $verification_data ) );
-			}
-
-			// Send the verification request to the IPG.
-			$response = $this->api_handler->verify_3ds_authentication( $verification_data );
-
-			// Handle the response from IPG.
-			if ( 'AUTHENTICATED' === $response['status'] ) {
-				$this->logger->info(
-					'3D Secure authentication verified successfully.',
-					array(
-						'order_id' => $order->get_id(),
-						'response' => $response,
-					)
-				);
-				return $response;
-			} else {
+			if ( 'AUTHENTICATED' !== $response['status'] ) {
 				throw NovaBankaIPGException::paymentError( '3D Secure verification failed.', $response );
 			}
-		} catch ( NovaBankaIPGException $e ) {
-			$this->logger->error(
-				'3D Secure verification failed.',
+
+			$this->logger->info(
+				'3D Secure authentication verified successfully.',
 				array(
 					'order_id' => $order->get_id(),
-					'error'    => $e->getMessage(),
+					'response' => $response,
 				)
 			);
-			throw $e;
+
+			return $response;
 		} catch ( Exception $e ) {
-			$this->logger->error(
-				'3D Secure verification failed due to an unexpected error.',
+			NovaBankaIPGException::handle_error(
+				$e,
+				$this->logger,
+				'3D Secure verification',
 				array(
 					'order_id' => $order->get_id(),
-					'error'    => $e->getMessage(),
 				)
 			);
-			throw new NovaBankaIPGException( '3D Secure verification failed: ' . esc_html( $e->getMessage() ) );
 		}
 	}
 
@@ -196,11 +161,20 @@ class ThreeDSHandler {
 	 * @return bool True if the 3DS authentication was successful, false otherwise.
 	 * @throws NovaBankaIPGException If the response data is invalid or indicates a failure.
 	 */
-	public static function handle_3ds_response( array $response_data ): bool {
-		if ( empty( $response_data['status'] ) || 'AUTHENTICATED' !== $response_data['status'] ) {
-			throw new NovaBankaIPGException( '3D Secure authentication failed or returned an invalid status.' );
+	public function handle_3ds_response( array $response_data ): bool {
+		if ( ! isset( $response_data['status'] ) ) {
+			throw NovaBankaIPGException::invalid_response( 'Missing 3DS status' );
 		}
-		return true;
+
+		$this->logger->info(
+			'3DS Response received',
+			array(
+				'status' => $response_data['status'],
+				'data'   => SharedUtilities::redact_sensitive_data( $response_data ),
+			)
+		);
+
+		return 'SUCCESS' === strtoupper( $response_data['status'] );
 	}
 
 	/**
@@ -244,29 +218,46 @@ class ThreeDSHandler {
 	/**
 	 * Prepare 3DS data for PaymentInit request.
 	 *
-	 * @param array $order_data Order and customer data.
+	 * @param WC_Order $order The order object.
+	 * @param array    $payment_data The payment data.
 	 * @return array Prepared 3DS data.
 	 */
-	public function prepare_3ds_data( array $order_data ): array {
-		$threeds_data = array(
-			'payinst'                                 => 'VPAS',
-			'acctInfo'                                => $this->prepare_account_info( $order_data ),
-			'threeDSRequestorAuthenticationInfo'      => $this->prepare_authentication_info( $order_data ),
-			'threeDSRequestorPriorAuthenticationInfo' => $this->prepare_prior_auth_info( $order_data ),
+	public function prepare_3ds_data( WC_Order $order, array $payment_data ): array {
+		return array_merge(
+			$payment_data,
+			array(
+				'returnUrl' => $this->get_3ds_return_url( $order ),
+				'orderId'   => $order->get_id(),
+				'amount'    => SharedUtilities::format_amount( $order->get_total() ),
+				'currency'  => $order->get_currency(),
+			)
 		);
+	}
 
-		$this->logger->debug( 'Prepared 3DS data', array( 'data' => $threeds_data ) );
-		return $threeds_data;
+	/**
+	 * Get the return URL for 3DS authentication.
+	 *
+	 * @param WC_Order $order The order object.
+	 * @return string The formatted return URL.
+	 */
+	private function get_3ds_return_url( WC_Order $order ): string {
+		return add_query_arg(
+			array(
+				'wc-api'   => 'novabankaipg_3ds',
+				'order_id' => $order->get_id(),
+			),
+			home_url( '/' )
+		);
 	}
 
 	/**
 	 * Prepare account information for 3DS.
 	 *
-	 * @param array $order_data Order and customer data.
+	 * @param WC_Order $order The order object.
 	 * @return array Account information.
 	 */
-	private function prepare_account_info( array $order_data ): array {
-		$user_id      = $order_data['user_id'] ?? 0;
+	private function prepare_account_info( WC_Order $order ): array {
+		$user_id      = $order->get_user_id() ?? 0;
 		$account_data = array();
 
 		if ( $user_id ) {
@@ -279,32 +270,5 @@ class ThreeDSHandler {
 		}
 
 		return $account_data;
-	}
-
-	/**
-	 * Prepare authentication information for 3DS request.
-	 *
-	 * @param array $order_data Order and customer data.
-	 * @return array Authentication information.
-	 */
-	private function prepare_authentication_info( array $order_data ): array {
-		$auth_info = array(
-			'threeDSReqAuthMethod' => '02', // Example: 02 means two-factor authentication.
-		);
-		return $auth_info;
-	}
-
-	/**
-	 * Prepare prior authentication information for 3DS request.
-	 *
-	 * @param array $order_data Order and customer data.
-	 * @return array Prior authentication information.
-	 */
-	private function prepare_prior_auth_info( array $order_data ): array {
-		$prior_auth_info = array(
-			'threeDSReqPriorAuthData'   => 'ABC123', // Example data, this would come from prior transactions.
-			'threeDSReqPriorAuthMethod' => '01',  // 01 indicates Frictionless flow.
-		);
-		return $prior_auth_info;
 	}
 }
