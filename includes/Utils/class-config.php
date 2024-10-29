@@ -3,7 +3,6 @@
  * Config Class
  *
  * Manages configuration settings for the NovaBanka IPG plugin.
- * Provides methods for retrieving and updating plugin settings.
  *
  * @package NovaBankaIPG\Utils
  * @since 1.0.1
@@ -17,311 +16,221 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Class Config
- *
- * Handles configuration management for the NovaBanka IPG plugin.
  */
 class Config {
 	/**
-	 * Option prefix for all plugin settings.
-	 *
-	 * @var string
-	 */
-	private const OPTION_PREFIX = 'wc_novabankaipg_';
-
-	/**
-	 * Default settings.
+	 * Plugin settings
 	 *
 	 * @var array
 	 */
-	private const DEFAULT_SETTINGS = array(
-		'enabled'                => 'no',
-		'test_mode'              => 'yes',
-		'debug'                  => 'no',
-		'title'                  => 'NovaBanka IPG',
-		'description'            => 'Pay securely using NovaBanka IPG.',
+	private array $settings;
 
-		// Test mode settings.
-		'test_api_endpoint'      => 'https://ipgtest.novabanka.com/IPGWeb/servlet/PaymentInitRequest',
-		'test_terminal_id'       => '',
-		'test_terminal_password' => '',
-		'test_secret_key'        => '',
-
-		// Production mode settings.
-		'live_api_endpoint'      => 'https://ipg.novabanka.com/IPGWeb/servlet/PaymentInitRequest',
-		'live_terminal_id'       => '',
-		'live_terminal_password' => '',
-		'live_secret_key'        => '',
-
-		// Action settings.
-		'action'                 => '1', // 1 = PURCHASE, 4 = AUTHORIZATION
-
-		// Response URLs.
-		'response_url'           => '',  // Will be dynamically set.
-		'error_url'              => '',   // Will be dynamically set.
-
-		// Language settings.
-		'langid'                 => 'EN',
-
-		// 3DS settings.
-		'threeds_enabled'        => 'yes',
-		'threeds_auth_method'    => '02',
-		'threeds_prior_auth'     => '01',
+	/**
+	 * Required gateway settings
+	 */
+	private const REQUIRED_SETTINGS = array(
+		'terminal_id' => array(
+			'title'    => 'Terminal ID',
+			'type'     => 'text',
+			'required' => true,
+			'default'  => '89110001',
+		),
+		'password'    => array(
+			'title'    => 'Password',
+			'type'     => 'password',
+			'required' => true,
+			'default'  => 'test1234',
+		),
+		'secret_key'  => array(
+			'title'    => 'Secret Key',
+			'type'     => 'password',
+			'required' => true,
+			'default'  => 'YXKZPOQ9RRLGPDED5D3PC5BJ',
+		),
+		'ipg_url'     => array(
+			'title'    => 'IPG URL',
+			'type'     => 'text',
+			'required' => true,
+			'default'  => 'https://ipgtest.novabanka.com/IPGWeb/servlet/',
+		),
 	);
 
 	/**
-	 * Retrieve a setting value by key.
-	 *
-	 * @param string $key     The setting key to retrieve.
-	 * @param mixed  $default Default value if setting not found.
-	 * @return mixed The setting value or default if not found.
+	 * Optional gateway settings
 	 */
-	public static function get_setting( string $key, $default = null ) {
-		$key   = sanitize_key( $key );
-		$value = get_option( self::OPTION_PREFIX . $key, $default );
+	private const OPTIONAL_SETTINGS = array(
+		'enabled'             => array(
+			'title'   => 'Enable/Disable',
+			'type'    => 'checkbox',
+			'label'   => 'Enable NovaBanka IPG Payment',
+			'default' => 'no',
+		),
+		'title'               => array(
+			'title'       => 'Title',
+			'type'        => 'text',
+			'description' => 'This controls the title which the user sees during checkout.',
+			'default'     => 'Credit Card',
+		),
+		'description'         => array(
+			'title'       => 'Description',
+			'type'        => 'textarea',
+			'description' => 'This controls the description which the user sees during checkout.',
+			'default'     => 'Pay securely using your credit card.',
+		),
+		'message_type'        => array(
+			'title'   => 'Message Type',
+			'type'    => 'select',
+			'options' => array(
+				'VISEC' => 'VISEC / VIREC first transaction',
+			),
+			'default' => 'VISEC',
+		),
+		'message_version'     => array(
+			'title'   => 'Message Version',
+			'type'    => 'select',
+			'options' => array( '1' => '1' ),
+			'default' => '1',
+		),
+		'action'              => array(
+			'title'   => 'Action',
+			'type'    => 'select',
+			'options' => array(
+				'1' => 'PURCHASE',
+				'4' => 'AUTHORIZATION',
+			),
+			'default' => '1',
+		),
+		'notification_format' => array(
+			'title'   => 'Notification Format',
+			'type'    => 'select',
+			'options' => array( 'json' => 'JSON' ),
+			'default' => 'json',
+		),
+		'payment_page_mode'   => array(
+			'title'   => 'Payment Page Mode',
+			'type'    => 'select',
+			'options' => array( '0' => 'STANDARD' ),
+			'default' => '0',
+		),
+		'language'            => array(
+			'title'   => 'Language',
+			'type'    => 'text',
+			'default' => 'USA',
+		),
+		'card_sha2'           => array(
+			'title'   => 'Card SHA2',
+			'type'    => 'select',
+			'options' => array(
+				'Y' => 'Yes',
+				'N' => 'No',
+			),
+			'default' => 'Y',
+		),
+		'payment_timeout'     => array(
+			'title'   => 'Payment Timeout',
+			'type'    => 'text',
+			'default' => '30',
+		),
+	);
 
-		/**
-		 * Filter the retrieved setting value.
-		 *
-		 * @since 1.0.1
-		 * @param mixed  $value   The setting value.
-		 * @param string $key     The setting key.
-		 * @param mixed  $default The default value.
-		 */
-		return apply_filters( 'novabankaipg_get_setting', $value, $key, $default );
+	/**
+	 * Constructor
+	 *
+	 * @param array $settings Plugin settings
+	 */
+	public function __construct( array $settings ) {
+		$this->settings = $settings;
 	}
 
 	/**
-	 * Retrieve all plugin settings.
+	 * Get all settings
 	 *
-	 * @return array All settings as an associative array.
+	 * @return array
 	 */
-	public static function get_all_settings(): array {
-		$settings = get_option( 'woocommerce_novabankaipg_settings', self::DEFAULT_SETTINGS );
-
-		/**
-		 * Filter all plugin settings.
-		 *
-		 * @since 1.0.1
-		 * @param array $settings The settings array.
-		 */
-		return apply_filters( 'novabankaipg_all_settings', $settings );
+	public function get_all_settings(): array {
+		return $this->settings;
 	}
 
 	/**
-	 * Update a specific plugin setting.
+	 * Get setting value
 	 *
-	 * @param string $key   The setting key to update.
-	 * @param mixed  $value The new value for the setting.
-	 * @return bool True on success, false on failure.
+	 * @param string $key Setting key
+	 * @param mixed  $default Default value
+	 * @return mixed
 	 */
-	public static function update_setting( string $key, $value ): bool {
-		$key      = sanitize_key( $key );
-		$settings = self::get_all_settings();
-
-		/**
-		 * Filter the value before saving.
-		 *
-		 * @since 1.0.1
-		 * @param mixed  $value    The setting value to save.
-		 * @param string $key      The setting key.
-		 * @param array  $settings Current settings.
-		 */
-		$value = apply_filters( 'novabankaipg_pre_update_setting', $value, $key, $settings );
-
-		$settings[ $key ] = $value;
-		return update_option( 'woocommerce_novabankaipg_settings', $settings );
+	public function get_setting( string $key, $default = null ) {
+		return $this->settings[ $key ] ?? $default;
 	}
 
 	/**
-	 * Determine if the plugin is in test mode.
+	 * Get API credentials
 	 *
-	 * @return bool True if test mode is enabled, false otherwise.
+	 * @return array
 	 */
-	public static function is_test_mode(): bool {
-		$test_mode = self::get_setting( 'test_mode', 'yes' ) === 'yes';
-
-		/**
-		 * Filter test mode status.
-		 *
-		 * @since 1.0.1
-		 * @param bool $test_mode Whether test mode is enabled.
-		 */
-		return apply_filters( 'novabankaipg_is_test_mode', $test_mode );
-	}
-
-	/**
-	 * Determine if debug logging is enabled.
-	 *
-	 * @return bool True if debug logging is enabled, false otherwise.
-	 */
-	public static function is_debug_mode(): bool {
-		$debug_mode = self::get_setting( 'debug', 'no' ) === 'yes';
-
-		/**
-		 * Filter debug mode status.
-		 *
-		 * @since 1.0.1
-		 * @param bool $debug_mode Whether debug mode is enabled.
-		 */
-		return apply_filters( 'novabankaipg_is_debug_mode', $debug_mode );
-	}
-
-	/**
-	 * Get API endpoint URL based on mode.
-	 *
-	 * @return string API endpoint URL.
-	 */
-	public static function get_api_endpoint(): string {
-		$is_test  = self::is_test_mode();
-		$endpoint = $is_test ?
-			self::get_setting( 'test_api_endpoint' ) :
-			self::get_setting( 'live_api_endpoint' ); // Changed from 'api_endpoint'.
-
-		/**
-		 * Filter API endpoint URL.
-		 *
-		 * @since 1.0.1
-		 * @param string $endpoint The API endpoint URL.
-		 * @param bool   $is_test  Whether test mode is enabled.
-		 */
-		return apply_filters( 'novabankaipg_api_endpoint', $endpoint, $is_test );
-	}
-
-	/**
-	 * Get 3DS configuration.
-	 *
-	 * @return array 3DS configuration settings.
-	 */
-	public static function get_threeds_config(): array {
-		$config = array(
-			'enabled'     => self::get_setting( 'threeds_enabled', 'yes' ) === 'yes',
-			'auth_method' => self::get_setting( 'threeds_auth_method', '02' ),
-			'prior_auth'  => self::get_setting( 'threeds_prior_auth', '01' ),
+	public function get_api_credentials(): array {
+		return array(
+			'terminal_id' => $this->get_setting( 'terminal_id' ),
+			'password'    => $this->get_setting( 'password' ),
+			'secret_key'  => $this->get_setting( 'secret_key' ),
 		);
-
-		/**
-		 * Filter 3DS configuration.
-		 *
-		 * @since 1.0.1
-		 * @param array $config The 3DS configuration array.
-		 */
-		return apply_filters( 'novabankaipg_threeds_config', $config );
 	}
 
 	/**
-	 * Delete all plugin settings.
+	 * Get API endpoint
 	 *
-	 * @return bool True on success, false on failure.
+	 * @return string
 	 */
-	public static function delete_all_settings(): bool {
-		/**
-		 * Action before deleting all settings.
-		 *
-		 * @since 1.0.1
-		 */
-		do_action( 'novabankaipg_before_delete_settings' );
-
-		$result = delete_option( 'woocommerce_novabankaipg_settings' );
-
-		/**
-		 * Action after deleting all settings.
-		 *
-		 * @since 1.0.1
-		 * @param bool $result Whether the deletion was successful.
-		 */
-		do_action( 'novabankaipg_after_delete_settings', $result );
-
-		return $result;
+	public function get_api_endpoint(): string {
+		return $this->get_setting( 'ipg_url' );
 	}
 
 	/**
-	 * Validate required settings.
+	 * Get notification URL
 	 *
-	 * @return bool True if all required settings are valid.
+	 * @return string
 	 */
-	public static function validate_settings(): bool {
-		$required = array(
-			'terminal_id',
-			'terminal_password',
-			'secret_key',
-			'api_endpoint',
-		);
+	public function get_notification_url(): string {
+		return add_query_arg( 'wc-api', 'novabankaipg', home_url( '/' ) );
+	}
 
-		foreach ( $required as $key ) {
-			if ( empty( self::get_setting( $key ) ) ) {
+	/**
+	 * Get error URL
+	 *
+	 * @return string
+	 */
+	public function get_error_url(): string {
+		return add_query_arg( 'wc-api', 'novabankaipg_error', home_url( '/' ) );
+	}
+
+	/**
+	 * Validate configuration
+	 *
+	 * @return bool
+	 */
+	public function validate_config(): bool {
+		foreach ( self::REQUIRED_SETTINGS as $key => $setting ) {
+			if ( $setting['required'] && empty( $this->get_setting( $key ) ) ) {
 				return false;
 			}
 		}
-
 		return true;
 	}
 
 	/**
-	 * Get form fields for the payment gateway settings.
+	 * Get form fields for WooCommerce settings
 	 *
-	 * @since 1.0.0
-	 * @return array Array of form field settings.
+	 * @return array
 	 */
-	public static function get_form_fields(): array {
-		return array(
-			'enabled'                => array(
-				'title'   => __( 'Enable/Disable', 'novabanka-ipg-gateway' ),
-				'type'    => 'checkbox',
-				'label'   => __( 'Enable NovaBanka IPG Gateway', 'novabanka-ipg-gateway' ),
-				'default' => self::DEFAULT_SETTINGS['enabled'],
-			),
-			// Test Mode.
-			'test_mode'              => array(
-				'title'       => __( 'Test Mode', 'novabanka-ipg-gateway' ),
-				'type'        => 'checkbox',
-				'label'       => __( 'Enable Test Mode', 'novabanka-ipg-gateway' ),
-				'default'     => self::DEFAULT_SETTINGS['test_mode'],
-				'description' => __( 'Place the payment gateway in test mode.', 'novabanka-ipg-gateway' ),
-			),
-			// Test Credentials.
-			'test_terminal_id'       => array(
-				'title'       => __( 'Test Terminal ID', 'novabanka-ipg-gateway' ),
-				'type'        => 'text',
-				'description' => __( 'Your test terminal ID from NovaBanka.', 'novabanka-ipg-gateway' ),
-				'default'     => self::DEFAULT_SETTINGS['test_terminal_id'],
-				'desc_tip'    => true,
-			),
-			'test_terminal_password' => array(
-				'title'       => __( 'Test Terminal Password', 'novabanka-ipg-gateway' ),
-				'type'        => 'password',
-				'description' => __( 'Your test terminal password from NovaBanka.', 'novabanka-ipg-gateway' ),
-				'default'     => self::DEFAULT_SETTINGS['test_terminal_password'],
-				'desc_tip'    => true,
-			),
-			'test_secret_key'        => array(
-				'title'       => __( 'Test Secret Key', 'novabanka-ipg-gateway' ),
-				'type'        => 'password',
-				'description' => __( 'Your test secret key from NovaBanka.', 'novabanka-ipg-gateway' ),
-				'default'     => self::DEFAULT_SETTINGS['test_secret_key'],
-				'desc_tip'    => true,
-			),
-			// Live Credentials.
-			'live_terminal_id'       => array(
-				'title'       => __( 'Live Terminal ID', 'novabanka-ipg-gateway' ),
-				'type'        => 'text',
-				'description' => __( 'Your live terminal ID from NovaBanka.', 'novabanka-ipg-gateway' ),
-				'default'     => self::DEFAULT_SETTINGS['live_terminal_id'],
-				'desc_tip'    => true,
-			),
-			'live_terminal_password' => array(
-				'title'       => __( 'Live Terminal Password', 'novabanka-ipg-gateway' ),
-				'type'        => 'password',
-				'description' => __( 'Your live terminal password from NovaBanka.', 'novabanka-ipg-gateway' ),
-				'default'     => self::DEFAULT_SETTINGS['live_terminal_password'],
-				'desc_tip'    => true,
-			),
-			'live_secret_key'        => array(
-				'title'       => __( 'Live Secret Key', 'novabanka-ipg-gateway' ),
-				'type'        => 'password',
-				'description' => __( 'Your live secret key from NovaBanka.', 'novabanka-ipg-gateway' ),
-				'default'     => self::DEFAULT_SETTINGS['live_secret_key'],
-				'desc_tip'    => true,
-			),
-		);
+	public function get_form_fields(): array {
+		return array_merge( self::REQUIRED_SETTINGS, self::OPTIONAL_SETTINGS );
+	}
+
+	/**
+	 * Get sensitive fields that should be redacted in logs
+	 *
+	 * @return array
+	 */
+	public static function get_sensitive_fields(): array {
+		return array( 'password', 'secret_key' );
 	}
 }

@@ -34,23 +34,6 @@ class Logger {
 	private const LOG_SOURCE = 'novabanka-ipg';
 
 	/**
-	 * Keys that should be redacted in logs for security.
-	 *
-	 * @var array
-	 */
-	private const SENSITIVE_KEYS = array(
-		'password',
-		'terminal_password',
-		'secret_key',
-		'card_number',
-		'cvv',
-		'pan',
-		'token',
-		'auth_code',
-		'msgVerifier',
-	);
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -158,25 +141,13 @@ class Logger {
 			return;
 		}
 
-		// Sanitize and validate data.
 		$message = sanitize_text_field( $message );
-		$context = $this->sanitize_context( $context );
+		$context = SharedUtilities::redact_sensitive_data( $context );
 
-		// Format the log entry.
 		$log_entry = $this->format_message( $message, $context );
 
-		/**
-		 * Filter log entry before writing.
-		 *
-		 * @since 1.0.1
-		 * @param string $log_entry The formatted log entry.
-		 * @param string $level     The log level.
-		 * @param string $message   The original message.
-		 * @param array  $context   The context data.
-		 */
 		$log_entry = apply_filters( 'novabankaipg_log_entry', $log_entry, $level, $message, $context );
 
-		// Write to log.
 		$this->wc_logger->{$level}(
 			$log_entry,
 			array(
@@ -184,15 +155,6 @@ class Logger {
 			)
 		);
 
-		/**
-		 * Action after writing to log.
-		 *
-		 * @since 1.0.1
-		 * @param string $level     The log level.
-		 * @param string $message   The original message.
-		 * @param array  $context   The context data.
-		 * @param string $log_entry The formatted log entry.
-		 */
 		do_action( 'novabankaipg_after_log', $level, $message, $context, $log_entry );
 	}
 
@@ -215,39 +177,19 @@ class Logger {
 	}
 
 	/**
-	 * Sanitize context data by redacting sensitive information.
+	 * Log error and throw exception.
 	 *
-	 * @param array $context Context data to sanitize.
-	 * @return array Sanitized context data.
+	 * @param string $message    Error message.
+	 * @param array  $context    Error context.
+	 * @param string $error_type Error type for exception.
+	 * @throws NovaBankaIPGException
 	 */
-	private function sanitize_context( array $context ): array {
-		array_walk_recursive(
-			$context,
-			function ( &$value, $key ) {
-				if ( $this->should_redact_key( $key ) ) {
-					$value = str_repeat( '*', 8 );
-				} elseif ( is_string( $value ) ) {
-					$value = sanitize_text_field( $value );
-				}
-			}
-		);
-
-		return $context;
-	}
-
-	/**
-	 * Check if a key should be redacted.
-	 *
-	 * @param string $key Key to check.
-	 * @return bool True if key should be redacted.
-	 */
-	private function should_redact_key( string $key ): bool {
-		$key = strtolower( $key );
-		foreach ( self::SENSITIVE_KEYS as $sensitive_key ) {
-			if ( false !== strpos( $key, $sensitive_key ) ) {
-				return true;
-			}
-		}
-		return false;
+	public function log_error_and_throw(
+		string $message,
+		array $context = array(),
+		string $error_type = 'API_ERROR'
+	): void {
+		$this->error( $message, $context );
+		throw new NovaBankaIPGException( $message, $error_type );
 	}
 }

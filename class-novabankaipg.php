@@ -28,7 +28,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 use NovaBankaIPG\Core\NovaBankaIPGGateway;
 use NovaBankaIPG\Utils\APIHandler;
 use NovaBankaIPG\Utils\Config;
-use NovaBankaIPG\Utils\DataHandler;
 use NovaBankaIPG\Utils\Logger;
 use NovaBankaIPG\Utils\MessageHandler;
 use NovaBankaIPG\Utils\SharedUtilities;
@@ -129,7 +128,6 @@ class NovaBankaIPG {
 	private function init_container(): void {
 		// Initialize basic utilities first.
 		$this->container['logger']       = new Logger();
-		$this->container['data_handler'] = new DataHandler();
 
 		// Get settings.
 		$settings = Config::get_all_settings();
@@ -139,7 +137,6 @@ class NovaBankaIPG {
 			$settings['terminal_id'],
 			$settings['terminal_password'],
 			$settings['secret_key'],
-			$this->container['data_handler'],
 			$this->container['logger']
 		);
 
@@ -150,23 +147,26 @@ class NovaBankaIPG {
 			$settings['terminal_password'] ?? '',
 			$settings['secret_key'] ?? '',
 			$this->container['logger'],
-			$this->container['data_handler'],
 			$settings['test_mode'] ?? 'yes'
 		);
 
-		// Initialize payment service (Business logic).
+		// Initialize services.
+		$this->init_services();
+	}
+
+	/**
+	 * Initialize services.
+	 */
+	private function init_services(): void {
 		$this->container['payment_service'] = new PaymentService(
 			$this->container['api_handler'],
 			$this->container['message_handler'],
-			$this->container['data_handler'],
 			$this->container['logger']
 		);
 
-		// Initialize notification service.
 		$this->container['notification_service'] = new NotificationService(
 			$this->container['logger'],
-			$this->container['message_handler'],
-			$this->container['data_handler']
+			$this->container['message_handler']
 		);
 	}
 

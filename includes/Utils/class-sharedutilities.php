@@ -11,10 +11,6 @@
 namespace NovaBankaIPG\Utils;
 
 use NovaBankaIPG\Exceptions\NovaBankaIPGException;
-use NovaBankaIPG\Utils\SharedUtilities;
-use NovaBankaIPG\Utils\Logger;
-use NovaBankaIPG\Utils\DataHandler;
-use NovaBankaIPG\Config\Config;
 
 /**
  * SharedUtilities Class
@@ -223,5 +219,61 @@ class SharedUtilities {
 		);
 
 		return $statuses[ $status ] ?? $status;
+	}
+
+	/**
+	 * Field lengths for various data types.
+	 *
+	 * @var array
+	 */
+	public const FIELD_LENGTHS = array(
+		'phone'    => 20,
+		'email'    => 255,
+		'name'     => 50,
+		'address1' => 100,
+		'address2' => 100,
+		'address3' => 40,
+		'city'     => 40,
+		'zip'      => 20,
+	);
+
+	/**
+	 * Format a field according to its type.
+	 *
+	 * @param string $value The value to format.
+	 * @param string $field_type The type of field to format.
+	 * @return string The formatted value.
+	 * @throws NovaBankaIPGException If the field type is invalid.
+	 */
+	public static function format_field( string $value, string $field_type ): string {
+		if ( ! isset( self::FIELD_LENGTHS[ $field_type ] ) ) {
+			throw new NovaBankaIPGException(
+				sprintf(
+					/* translators: %s: field type that was invalid */
+					esc_html__( 'Invalid field type: %s', 'novabanka-ipg-gateway' ),
+					esc_html( $field_type )
+				)
+			);
+		}
+
+		return substr( sanitize_text_field( $value ), 0, self::FIELD_LENGTHS[ $field_type ] );
+	}
+
+	/**
+	 * Redact sensitive data.
+	 *
+	 * @param array $data Data to redact.
+	 * @return array Redacted data.
+	 */
+	public static function redact_sensitive_data( array $data ): array {
+		$sensitive_fields = array( 'password', 'terminal_password', 'secret_key' );
+
+		foreach ( $sensitive_fields as $field ) {
+			if ( isset( $data[ $field ] ) ) {
+				$data[ $field ] = '***REDACTED***';
+			}
+		}
+
+		return $data;
 	}
 }

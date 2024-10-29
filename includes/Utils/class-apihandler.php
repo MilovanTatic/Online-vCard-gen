@@ -1,9 +1,8 @@
 <?php
 /**
- * APIHandler Utility Class
+ * API Handler Class
  *
- * Handles HTTP communication with the NovaBanka IPG API according to integration guide.
- * Manages request/response formatting, message verification, and error handling.
+ * Handles HTTP communication with the NovaBanka IPG API.
  *
  * @package NovaBankaIPG\Utils
  * @since 1.0.1
@@ -15,7 +14,13 @@ use NovaBankaIPG\Exceptions\NovaBankaIPGException;
 use WP_Error;
 
 /**
- * Handles raw HTTP communication with the IPG API.
+ * Class APIHandler
+ *
+ * Handles HTTP communication with the NovaBanka IPG API.
+ * Makes API requests and handles basic response validation.
+ *
+ * @package NovaBankaIPG\Utils
+ * @since 1.0.1
  */
 class APIHandler {
 	/**
@@ -23,247 +28,189 @@ class APIHandler {
 	 *
 	 * @var string
 	 */
-	private $api_endpoint;
-
-	/**
-	 * Terminal ID.
-	 *
-	 * @var string
-	 */
-	private $terminal_id;
-
-	/**
-	 * Terminal password.
-	 *
-	 * @var string
-	 */
-	private $terminal_password;
-
-	/**
-	 * Secret key.
-	 *
-	 * @var string
-	 */
-	private $secret_key;
+	private string $api_endpoint;
 
 	/**
 	 * Logger instance.
 	 *
 	 * @var Logger
 	 */
-	private $logger;
+	private Logger $logger;
 
 	/**
-	 * Data handler instance.
+	 * Success HTTP status codes.
 	 *
-	 * @var DataHandler
+	 * @var array
 	 */
-	private $data_handler;
-
-	/**
-	 * Test mode flag.
-	 *
-	 * @var bool
-	 */
-	private $test_mode;
+	private const SUCCESS_STATUS_CODES = array(
+		200, // OK.
+		201, // Created.
+		202, // Accepted.
+	);
 
 	/**
 	 * Constructor.
 	 *
-	 * @param string      $api_endpoint      API endpoint URL.
-	 * @param string      $terminal_id       Terminal ID.
-	 * @param string      $terminal_password Terminal password.
-	 * @param string      $secret_key        Secret key for message verification.
-	 * @param Logger      $logger            Logger instance.
-	 * @param DataHandler $data_handler      Data handler instance.
-	 * @param string      $test_mode         Test mode flag.
+	 * @param string $api_endpoint API endpoint URL.
+	 * @param Logger $logger Logger instance.
 	 */
-	public function __construct(
-		string $api_endpoint,
-		string $terminal_id,
-		string $terminal_password,
-		string $secret_key,
-		Logger $logger,
-		DataHandler $data_handler,
-		string $test_mode = 'yes'
-	) {
-		$this->api_endpoint      = $api_endpoint;
-		$this->terminal_id       = $terminal_id;
-		$this->terminal_password = $terminal_password;
-		$this->secret_key        = $secret_key;
-		$this->logger            = $logger;
-		$this->data_handler      = $data_handler;
-		$this->test_mode         = 'yes' === $test_mode;
+	public function __construct( string $api_endpoint, Logger $logger ) {
+		$this->api_endpoint = $api_endpoint;
+		$this->logger       = $logger;
 	}
 
 	/**
-	 * Send HTTP request to IPG API.
+	 * Send a POST request to the API.
 	 *
-	 * @param string $endpoint API endpoint.
-	 * @param array  $data     Request data.
+	 * @param string $endpoint API endpoint path.
+	 * @param array  $data Request data.
+	 * @param int    $timeout Request timeout in seconds.
 	 * @return array Response data.
-	 * @throws NovaBankaIPGException When HTTP request fails.
+	 * @throws NovaBankaIPGException If request fails.
 	 */
-	public function send_request( string $endpoint, array $data ): array {
-		try {
-			// Send request.
-			$response = wp_remote_post(
-				$this->get_api_url( $endpoint ),
-				array(
-					'headers'   => array(
-						'Content-Type' => 'application/json',
-						'Accept'       => 'application/json',
-					),
-					'body'      => wp_json_encode( $data ),
-					'timeout'   => 30,
-					'sslverify' => true,
-				)
-			);
+	public function send_request( string $endpoint, array $data, int $timeout = 30 ): array {
+		$url = $this->get_api_url( $endpoint );
 
-			// Handle WP_Error.
-			if ( is_wp_error( $response ) ) {
-				throw new NovaBankaIPGException( esc_html( $response->get_error_message() ) );
-			}
+		$this->logger->debug(
+			'Sending API request',
+			array(
+				'endpoint' => $endpoint,
+				'data'     => $data,
+			)
+		);
 
-			// Get response code and body.
-			$code = wp_remote_retrieve_response_code( $response );
-			$body = wp_remote_retrieve_body( $response );
+		$response = wp_remote_post(
+			$url,
+			array(
+				'headers' => $this->get_request_headers(),
+				'body'    => wp_json_encode( $data ),
+				'timeout' => $timeout,
+			)
+		);
 
-			// Handle non-200 responses.
-			if ( $code < 200 || $code >= 300 ) {
-				throw new NovaBankaIPGException( sprintf( 'HTTP error: %d', $code ) );
-			}
-
-			// Decode JSON response.
-			$decoded = json_decode( $body, true );
-			if ( JSON_ERROR_NONE !== json_last_error() ) {
-				throw new NovaBankaIPGException( 'Invalid JSON response.' );
-			}
-
-			return $decoded;
-
-		} catch ( Exception $e ) {
-			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
+		if ( is_wp_error( $response ) ) {
+			$this->handle_request_error( $response );
 		}
+
+		return $this->parse_response( $response );
+	}
+
+	/**
+	 * Send a GET request to the API.
+	 *
+	 * @param string $endpoint API endpoint path.
+	 * @param array  $params Query parameters.
+	 * @return array Response data.
+	 * @throws NovaBankaIPGException If request fails.
+	 */
+	public function get_request( string $endpoint, array $params = array() ): array {
+		$url = $this->get_api_url( $endpoint );
+		if ( ! empty( $params ) ) {
+			$url = add_query_arg( $params, $url );
+		}
+
+		$response = wp_remote_get(
+			$url,
+			array(
+				'headers' => $this->get_request_headers(),
+				'timeout' => 30,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			$this->handle_request_error( $response );
+		}
+
+		return $this->parse_response( $response );
+	}
+
+	/**
+	 * Get request headers.
+	 *
+	 * @return array Request headers.
+	 */
+	private function get_request_headers(): array {
+		return array(
+			'Content-Type'  => 'application/json',
+			'Accept'        => 'application/json',
+			'Cache-Control' => 'no-cache',
+		);
 	}
 
 	/**
 	 * Get full API URL.
 	 *
-	 * @param string $endpoint API endpoint.
+	 * @param string $endpoint API endpoint path.
 	 * @return string Full API URL.
 	 */
 	private function get_api_url( string $endpoint ): string {
-		return trailingslashit( $this->api_endpoint ) . ltrim( $endpoint, '/' );
+		return rtrim( $this->api_endpoint, '/' ) . '/' . ltrim( $endpoint, '/' );
 	}
 
 	/**
-	 * Redact sensitive data for logging.
+	 * Handle request error.
 	 *
-	 * @param array $data Data to redact.
-	 * @return array Redacted data.
+	 * @param WP_Error $error WordPress error object.
+	 * @throws NovaBankaIPGException Always throws exception with error details.
 	 */
-	private function redact_sensitive_data( array $data ): array {
-		$sensitive_fields = array( 'password', 'terminal_password', 'secret_key' );
-		foreach ( $sensitive_fields as $field ) {
-			if ( isset( $data[ $field ] ) ) {
-				$data[ $field ] = '***REDACTED***';
-			}
+	private function handle_request_error( WP_Error $error ): void {
+		$this->logger->error(
+			'API request failed',
+			array(
+				'error_message' => $error->get_error_message(),
+				'error_code'    => $error->get_error_code(),
+			)
+		);
+
+		throw new NovaBankaIPGException(
+			'API_ERROR',
+			sprintf( 'API request failed: %s', esc_html( $error->get_error_message() ) )
+		);
+	}
+
+	/**
+	 * Parse API response.
+	 *
+	 * @param array $response WordPress response array.
+	 * @return array Parsed response data.
+	 * @throws NovaBankaIPGException If response is invalid.
+	 */
+	private function parse_response( array $response ): array {
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( $body, true );
+
+		if ( JSON_ERROR_NONE !== json_last_error() ) {
+			$this->logger->error(
+				'Invalid JSON response',
+				array(
+					'response'   => $body,
+					'json_error' => json_last_error_msg(),
+				)
+			);
+
+			throw new NovaBankaIPGException(
+				'INVALID_RESPONSE',
+				'Invalid JSON response from API'
+			);
 		}
+
+		$this->logger->debug(
+			'API response received',
+			array(
+				'response' => $data,
+			)
+		);
+
 		return $data;
 	}
 
 	/**
-	 * Send payment initialization request to IPG.
+	 * Check if HTTP status code indicates success.
 	 *
-	 * @param array $init_data Payment initialization data.
-	 * @return array Response from IPG.
-	 * @throws NovaBankaIPGException When request fails.
+	 * @param int $status_code HTTP status code.
+	 * @return bool
 	 */
-	public function send_payment_init_request( array $init_data ): array {
-		try {
-			// Log request data for debugging.
-			$this->logger->debug(
-				'Sending payment init request.',
-				array(
-					'endpoint' => $this->get_api_url( 'PaymentInitRequest' ),
-					'data'     => $this->redact_sensitive_data( $init_data ),
-				)
-			);
-
-			// Add terminal credentials and required fields.
-			$request_data = array_merge(
-				$init_data,
-				array(
-					'msgName'  => 'PaymentInitRequest',
-					'version'  => '1',
-					'id'       => $this->terminal_id,
-					'password' => $this->terminal_password,
-					'action'   => '1', // 1 for payment init
-				)
-			);
-
-			// Generate message verifier.
-			$verifier_fields = array(
-				$request_data['msgName'],
-				$request_data['version'],
-				$request_data['id'],
-				$request_data['password'],
-				$request_data['amt'],
-				$request_data['trackid'],
-				$request_data['udf1'] ?? '',
-				$this->secret_key,
-				$request_data['udf5'] ?? '',
-			);
-
-			// Add message verifier to request.
-			$request_data['msgVerifier'] = base64_encode(
-				hash( 'sha256', implode( '', $verifier_fields ), true )
-			);
-
-			// Send request to PaymentInit endpoint.
-			$response = $this->send_request( 'PaymentInitRequest', $request_data );
-
-			// Log full response for debugging.
-			$this->logger->debug(
-				'Received payment init response.',
-				array(
-					'response' => $this->redact_sensitive_data( $response ),
-				)
-			);
-			// Check for error response.
-			if ( isset( $response['type'] ) && 'error' === $response['type'] ) {
-				throw new NovaBankaIPGException(
-					sprintf(
-						'IPG Error: %s - %s',
-						$response['errorCode'],
-						$response['errorDesc']
-					)
-				);
-			}
-
-			// Validate response.
-			if ( empty( $response['browserRedirectionURL'] ) ) {
-				throw new NovaBankaIPGException(
-					sprintf(
-						'Missing browserRedirectionURL in response. Response: %s',
-						wp_json_encode( $this->redact_sensitive_data( $response ) )
-					)
-				);
-			}
-
-			return $response;
-
-		} catch ( Exception $e ) {
-			$this->logger->error(
-				'Payment initialization failed.',
-				array(
-					'error'    => $e->getMessage(),
-					'data'     => $this->redact_sensitive_data( $init_data ),
-					'response' => isset( $response ) ? $this->redact_sensitive_data( $response ) : null,
-				)
-			);
-			throw new NovaBankaIPGException( esc_html( $e->getMessage() ) );
-		}
+	private function is_success_status( int $status_code ): bool {
+		return in_array( $status_code, self::SUCCESS_STATUS_CODES, true );
 	}
 }
